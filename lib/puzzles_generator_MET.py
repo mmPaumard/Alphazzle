@@ -57,6 +57,8 @@ class prepare_data_v():
             print(puzzles.shape, solutions.shape)
         
         is_result_correct = False
+        if np.random.randn() < 0:
+            is_result_correct = not is_result_correct
         
         for batch_idx in range(self.batch_size):
             image = square_crop_resize(self.paths[i*self.batch_size+batch_idx], self.puzzle_size)
@@ -97,8 +99,9 @@ class prepare_data_v():
                         print(batch_idx, shuffled_coord[i])
                 
             solutions[batch_idx] = int(is_result_correct)
-            
-        return puzzles.transpose(0, 3, 1, 2).astype(dtype=np.float32), solutions.reshape(-1, 1).astype(dtype=np.float32)
+
+        pad = self.space//2
+        return np.pad(puzzles.transpose(0, 3, 1, 2).astype(dtype=np.float32), [(0,0), (0,0), (pad,pad), (pad, pad)], mode='constant', constant_values=0 ), solutions.reshape(-1, 1).astype(dtype=np.float32)
 
 
 class prepare_data_p():
@@ -137,7 +140,7 @@ class prepare_data_p():
         for batch_idx in range(self.batch_size):
             image = square_crop_resize(self.paths[i*self.batch_size+batch_idx], self.puzzle_size)
             #fragments = [image[f] for f in f_coord]
-            fragments = [image[f]/255*2-1 for f in f_coord]
+            fragments = [image[f]/255.*2-1 for f in f_coord]
             #fragments = standardize_fragments(fragments)
             f_idx = list(range(len(fragments)))
             tmp = list(zip(f_coord, f_idx, fragments))
@@ -155,8 +158,17 @@ class prepare_data_p():
             
             next_fragments[batch_idx] = shuffled_frag[nb_placed_fragment]
             solutions[batch_idx][shuffled_idx[nb_placed_fragment]] = 1
-            
-        return [puzzles.transpose(0, 3, 1, 2).astype(np.float32), next_fragments.transpose(0,3,1,2).astype(np.float32)], np.argmax(solutions, axis=1)
+
+        pad = self.space//2
+        # add padding around fragmetns
+        puzzles = np.pad(puzzles.transpose(0, 3, 1, 2).astype(dtype=np.float32), [(0,0), (0,0), (pad,pad), (pad, pad)], mode='constant', constant_values=0 )
+        # add padding for next fragment
+        pad = self.space+self.fragment_size
+        puzzles = np.pad(puzzles, [(0,0), (0,0), (pad,0), (pad,0)], mode='constant', constant_values=0)
+        # blit fragment
+        sp = self.space//2
+        puzzles[:, :, sp:sp+self.fragment_size, sp:sp+self.fragment_size] = next_fragments.transpose(0,3,1,2).astype(np.float32)
+        return puzzles, np.argmax(solutions, axis=1)
     
     
 class prepare_fragments():
