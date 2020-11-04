@@ -247,5 +247,5 @@ class prepare_data_new():
 
             fragments_list.append(new_fragments)
            
-        return fragments_list
+        return fragments_list, ind
 
