@@ -193,3 +193,59 @@ class prepare_fragments():
         fragments = [image[f]/255*2-1 for f in f_coord]
         
         return fragments
+
+
+class prepare_data_new():
+    """Prepare the images per batch."""
+
+    def __init__(self, path, phase="train", puzzle_size=80, fragment_per_side=2, fragment_size=40,  space=0, nb_helpers=2, batch_size=64, central_known=False):
+        
+        assert puzzle_size==fragment_per_side*fragment_size+(fragment_per_side-1)*space
+        assert phase in ["train", "val", "test"]
+        
+        root_dir = os.path.join(path+"dataset_"+phase)
+        self.paths = [os.path.join(root_dir, file) for file in os.listdir(root_dir)]
+        self.puzzle_size = puzzle_size
+        self.fragment_per_side = fragment_per_side
+        self.fragment_size = fragment_size
+        self.space = space #between two fragments
+        self.nb_helpers = nb_helpers
+        self.batch_size = batch_size
+        self.central_known = central_known
+        
+    def __len__(self):
+        return int(np.floor(len(self.paths)/self.batch_size))
+
+    def __getitem__(self, i):
+        puzzles = np.zeros((self.batch_size, self.puzzle_size, self.puzzle_size, 3))
+        next_fragments = np.zeros((self.batch_size, self.fragment_size, self.fragment_size, 3))
+        solutions = np.zeros((self.batch_size, self.fragment_per_side**2), dtype=int)
+
+        fragments_list = []
+        
+        f_coord = [np.s_[self.fragment_size*i+self.space*(i):
+                         self.fragment_size*(i+1)+self.space*(i),
+                         self.fragment_size*j+self.space*(j):
+                         self.fragment_size*(j+1)+self.space*(j),
+                  :] for i in range(self.fragment_per_side)
+                     for j in range(self.fragment_per_side)]
+        
+        for batch_idx in range(self.batch_size):
+            image = square_crop_resize(self.paths[i*self.batch_size+batch_idx], self.puzzle_size)
+            #fragments = [image[f] for f in f_coord]
+            fragments = [image[f]/255*2-1 for f in f_coord]
+            n = len(fragments)
+
+            ind = random.randint(0,n-1)
+            val = fragments.pop(ind)
+            new_fragments = fragments[0:ind] + [np.zeros_like(fragments[0])] + fragments[ind:]
+
+            mask = [random.randint(0,1) for i in range(n)]
+
+            #new_fragments = [val] + list(np.array(mask)*np.array(new_fragments))
+            new_fragments = [val] + [mask[i] * np.array(new_fragments)[i] for i in range(len(mask))]
+
+            fragments_list.append(new_fragments)
+           
+        return fragments_list
+
