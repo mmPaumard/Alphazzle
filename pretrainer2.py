@@ -52,38 +52,16 @@ def main():
                                      fragment_size=FRAG_SIZE, space=SPACE_SIZE, nb_helpers=NB_HELP, central_known=CENTRAL_FRAGMENT)
     print("v dataset has been loaded")
 
-    ##### Prepare data new ########
-    dataset_train_new = prepare_data_new(path=DATASET_PATH, phase="train", puzzle_size=PUZZLE_SIZE,
-                                     fragment_per_side=NB_FRAG,
-                                     fragment_size=FRAG_SIZE, space=SPACE_SIZE, nb_helpers=NB_HELP,
-                                     central_known=CENTRAL_FRAGMENT)
-    dataset_valid_new = prepare_data_new(path=DATASET_PATH, phase="val", puzzle_size=PUZZLE_SIZE, fragment_per_side=NB_FRAG,
-                                     fragment_size=FRAG_SIZE, space=SPACE_SIZE, nb_helpers=NB_HELP,
-                                     central_known=CENTRAL_FRAGMENT)
-    print("new dataset has been loaded")
 
-    ## Prepare the neural networks ##
-    if WRN:
-        WRN_28_4 = create_model(options_for_defining_WRN_28_4)
-        feature_extractor = nn.Sequential(WRN_28_4,nn.MaxPool2d(2),nn.Flatten())
-    else:
-        resnet18 = models.resnet18(pretrained=True)
-        resnet18.fc = nn.Identity() # removing classification layer
-        feature_extractor = resnet18
+
 
 
     x,_ = dataset_train_p[0]
     x1, x2 = x
-    if WRN: x1, x2 = torch.tensor(x1), torch.tensor(x2)
-    else: x1, x2 = normalize_list(x1), normalize_list(x2)
-    v1, v2 = feature_extractor(x1), feature_extractor(x2)
-    img_size, frg_size = v1.shape[1], v2.shape[1]
+    x1, x2 = torch.tensor(x1), torch.tensor(x2)
 
-    ### Prepare neural network P ####
-    if WRN:
-        model = ModelP(wrn=WRN_28_4, nb_out=NB_FRAG**2, img_size=img_size, frg_size=frg_size)
-    else:
-        model = ModelPPretrained(base=feature_extractor, nb_out=NB_FRAG**2, img_size=img_size, frg_size=frg_size)
+    img_size, frg_size = x1.shape[1], x2.shape[1]
+
 
     model_new = ViT(
         image_size=img_size,
@@ -95,44 +73,22 @@ def main():
         mlp_dim=2048
     )
 
-    adam = Adam(model.parameters(), lr=0.001)
-    model_p = Model(model, adam, 'crossentropy', batch_metrics=['accuracy'])
-    model_p.cuda()
 
     adam_r = Adam(model_new.parameters(), lr=0.001)
     model_r = Model(model_new, adam_r, 'crossentropy', batch_metrics=['accuracy'])
     model_r.cuda()
 
 
-    ### Prepare neural network V ####
-    if WRN:
-        model = nn.Sequential(feature_extractor,
-                              nn.Linear(img_size, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 1))
-    else:
-        model = nn.Sequential(feature_extractor,
-                              nn.Linear(img_size, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 1))
-
     model_new_v = ViT(
         image_size=img_size,
         patch_size=frg_size,
-        num_classes=NB_FRAG ** 2,
+        num_classes=1,
         dim=1024,
         depth=6,
         heads=8,
         mlp_dim=2048
     )
 
-    adam = Adam(model.parameters(), lr=0.001)
-    model_v = Model(model, adam, 'BCEWithLogits', batch_metrics=['bin_acc'])
-    model_v.cuda()
 
     adam_r_v = Adam(model_new_v.parameters(), lr=0.001)
     model_r_v = Model(model_new_v, adam_r_v, 'BCEWithLogits', batch_metrics=['bin_acc'])
@@ -157,12 +113,10 @@ def main():
         for i in r:
             t += 1
             x, y = dataset_train_p[i]
-            if not WRN: x = [normalize_list(x[0]), normalize_list(x[1])]
             l, a = model_r.train_on_batch(x, y)
             lp += l
             ap += a
             x, y = dataset_train_v[i]
-            if not WRN: x = normalize_list(x)
             l, a = model_r_v.train_on_batch(x, y)
             lv += l
             av += a
@@ -174,9 +128,6 @@ def main():
         print('val, lv: {:4.2f} av:{:4.2f}'.format(lossVval, accVval))
         if accPval > bestP:
             bestP = accPval
-            if WRN: weights_w = {"network": WRN_28_4.state_dict()}
-            else: weights_w = {"network": feature_extractor.state_dict()}
-            torch.save(weights_w, filepath_w.format(epoch=e, val_acc=accPval))
             model_r.save_weights(filepath_p.format(epoch=e, val_acc=accPval))
         if accVval > bestV:
             bestV = accVval
