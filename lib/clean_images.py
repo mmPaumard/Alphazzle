@@ -10,6 +10,8 @@ import os
 import pickle
 import random
 import threading
+import torch
+import torchvision.transforms as transforms
 
 
 def resize_image(image, min_size):
@@ -67,15 +69,24 @@ def convert2rgb(image):
     return image
 
 
-def square_crop_resize(path, img_size):
+def trans(image):
+    if np.random.rand() > 0.5:
+        image = image[:, ::-1, :]
+
+    return image
+
+def square_crop_resize(path, img_size, da=False):
     # Read the image.
     image = Image.open(path)
 
     # Resize if needed.
-    image = resize_image(image, img_size)
+    image = np.array(resize_image(image, img_size))
 
     # Convert the image to RGB if needed.
     image = convert2rgb(image)
+
+    if da:
+        image = trans(image)
     
     # Get a square-crop of the image.
     height = len(image)

@@ -23,7 +23,7 @@ def standardize_fragments(images):
 class prepare_data_v():
     """Prepare the images per batch."""
 
-    def __init__(self, path, phase="train", puzzle_size=80, fragment_per_side=2, fragment_size=40,  space=0, nb_helpers=2, batch_size=64, central_known=False):
+    def __init__(self, path, phase="train", puzzle_size=80, fragment_per_side=2, fragment_size=40,  space=0, nb_helpers=2, batch_size=64, central_known=False, data_aug=False):
         
         assert puzzle_size==fragment_per_side*fragment_size+(fragment_per_side-1)*space
         assert phase in ["train", "val", "test"]
@@ -37,13 +37,14 @@ class prepare_data_v():
         self.nb_helpers = nb_helpers
         self.batch_size = batch_size
         self.central_known = central_known
+        self.data_aug = data_aug
 
     def __len__(self):
         return int(np.floor(len(self.paths)/self.batch_size))
 
     def __getitem__(self, i):
         puzzles = np.zeros((self.batch_size, self.puzzle_size, self.puzzle_size, 3))
-        solutions = np.zeros(self.batch_size, dtype=int)
+        solutions = np.zeros(self.batch_size, dtype=np.float32)
         
         f_coord = [np.s_[self.fragment_size*i+self.space*(i):
                          self.fragment_size*(i+1)+self.space*(i),
@@ -61,8 +62,8 @@ class prepare_data_v():
             is_result_correct = not is_result_correct
         
         for batch_idx in range(self.batch_size):
-            image = square_crop_resize(self.paths[i*self.batch_size+batch_idx], self.puzzle_size)
-            fragments = [image[f]/255*2-1 for f in f_coord]            
+            image = square_crop_resize(self.paths[i*self.batch_size+batch_idx], self.puzzle_size, self.data_aug)
+            fragments = [image[f]/255.*2-1 for f in f_coord]
             f_idx = list(range(len(fragments)))
             tmp = list(zip(f_coord, f_idx, fragments))
             random.shuffle(tmp)
@@ -98,16 +99,16 @@ class prepare_data_v():
                     if DEBUG:
                         print(batch_idx, shuffled_coord[i])
                 
-            solutions[batch_idx] = int(is_result_correct)
+            solutions[batch_idx] = is_result_correct
 
         pad = self.space//2
-        return np.pad(puzzles.transpose(0, 3, 1, 2).astype(dtype=np.float32), [(0,0), (0,0), (pad,pad), (pad, pad)], mode='constant', constant_values=0 ), solutions.reshape(-1, 1).astype(dtype=np.float32)
+        return np.pad(puzzles.transpose(0, 3, 1, 2).astype(dtype=np.float32), [(0,0), (0,0), (pad,pad), (pad, pad)], mode='constant', constant_values=0 ).squeeze(), solutions.reshape(-1)
 
 
 class prepare_data_p():
     """Prepare the images per batch."""
 
-    def __init__(self, path, phase="train", puzzle_size=80, fragment_per_side=2, fragment_size=40,  space=0, nb_helpers=2, batch_size=64, central_known=False):
+    def __init__(self, path, phase="train", puzzle_size=80, fragment_per_side=2, fragment_size=40,  space=0, nb_helpers=2, batch_size=64, central_known=False, data_aug=False):
         
         assert puzzle_size==fragment_per_side*fragment_size+(fragment_per_side-1)*space
         assert phase in ["train", "val", "test"]
@@ -121,6 +122,7 @@ class prepare_data_p():
         self.nb_helpers = nb_helpers
         self.batch_size = batch_size
         self.central_known = central_known
+        self.data_aug = data_aug
         
     def __len__(self):
         return int(np.floor(len(self.paths)/self.batch_size))
@@ -138,7 +140,7 @@ class prepare_data_p():
                      for j in range(self.fragment_per_side)]
         
         for batch_idx in range(self.batch_size):
-            image = square_crop_resize(self.paths[i*self.batch_size+batch_idx], self.puzzle_size)
+            image = square_crop_resize(self.paths[i*self.batch_size+batch_idx], self.puzzle_size, da=self.data_aug)
             #fragments = [image[f] for f in f_coord]
             fragments = [image[f]/255.*2-1 for f in f_coord]
             #fragments = standardize_fragments(fragments)
@@ -168,7 +170,7 @@ class prepare_data_p():
         # blit fragment
         sp = self.space//2
         puzzles[:, :, sp:sp+self.fragment_size, sp:sp+self.fragment_size] = next_fragments.transpose(0,3,1,2).astype(np.float32)
-        return puzzles, np.argmax(solutions, axis=1)
+        return puzzles.squeeze(), np.argmax(solutions, axis=1).squeeze()
     
     
 class prepare_fragments():

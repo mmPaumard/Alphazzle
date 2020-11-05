@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from torch import nn
 
-MIN_NUM_PATCHES = 16
+MIN_NUM_PATCHES = 3
 
 class Residual(nn.Module):
     def __init__(self, fn):
@@ -66,6 +66,35 @@ class Attention(nn.Module):
         out =  self.to_out(out)
         return out
 
+
+class ConvHead(nn.Module):
+    def __init__(self, patch_size, dim):
+        super().__init__()
+        self.patch_size = patch_size
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, bias=False, padding=0)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, bias=True, padding=0)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, bias=True, padding=0)
+        self.bn1 = nn.BatchNorm2d(32, affine=False, track_running_stats=True)
+        self.bn2 = nn.BatchNorm2d(64, affine=False, track_running_stats=True)
+        self.bn3 = nn.BatchNorm2d(64, affine=False, track_running_stats=True)
+        self.lin = nn.Linear(64*64, dim, bias=False)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        b, p, d = x.shape
+        x = x.view(-1, 3, self.patch_size, self.patch_size)
+        x = self.relu(self.bn1(self.conv1(x)))
+        x = F.max_pool2d(x, kernel_size=2)
+        x = self.relu(self.bn2(self.conv2(x)))
+        x = F.max_pool2d(x, kernel_size=2)
+        x = self.relu(self.bn3(self.conv3(x)))
+        x = F.adaptive_avg_pool2d(x, 8)
+        x = x.view(b, p, 64*64)
+        x = self.lin(x)
+        return x
+
+
+
 class Transformer(nn.Module):
     def __init__(self, dim, depth, heads, mlp_dim, dropout):
         super().__init__()
@@ -82,17 +111,20 @@ class Transformer(nn.Module):
         return x
 
 class ViT(nn.Module):
-    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, channels = 3, dropout = 0., emb_dropout = 0.):
+    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, channels = 3, dropout = 0., emb_dropout = 0., conv_head = False):
         super().__init__()
         assert image_size % patch_size == 0, 'image dimensions must be divisible by the patch size'
         num_patches = (image_size // patch_size) ** 2
         patch_dim = channels * patch_size ** 2
-        assert num_patches > MIN_NUM_PATCHES, f'your number of patches ({num_patches}) is way too small for attention to be effective. try decreasing your patch size'
+        assert num_patches > MIN_NUM_PATCHES, f'your number of patches ({num_patches}, {MIN_NUM_PATCHES}) is way too small for attention to be effective. try decreasing your patch size'
 
         self.patch_size = patch_size
 
         self.pos_embedding = nn.Parameter(torch.randn(1, num_patches + 1, dim))
-        self.patch_to_embedding = nn.Linear(patch_dim, dim)
+        if conv_head:
+            self.patch_to_embedding = ConvHead(patch_size, dim)
+        else:
+            self.patch_to_embedding = nn.Linear(patch_dim, dim)
         self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
         self.dropout = nn.Dropout(emb_dropout)
 
