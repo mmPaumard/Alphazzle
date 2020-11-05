@@ -92,7 +92,7 @@ def main():
     train = torch.utils.data.DataLoader(dataset_train_p, batch_size=128, num_workers=6)
     val = torch.utils.data.DataLoader(dataset_valid_p, batch_size=64, num_workers=6)
 
-    logger = pl.loggers.TensorBoardLogger('tb_logs', name='model_v')
+    logger = pl.loggers.TensorBoardLogger('tb_logs', name='model_v_'+STRUCT)
     trainer = pl.Trainer(gpus=1, logger=logger, weights_summary='full', max_epochs=NB_EPOCHS)
     trainer.fit(model_p, train_dataloader=train, val_dataloaders=val)
     trainer.save_checkpoint(logger.log_dir + '/model_v_final_checkpoint.ckpt')
