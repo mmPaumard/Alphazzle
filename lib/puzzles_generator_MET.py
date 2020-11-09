@@ -204,7 +204,7 @@ class prepare_fragments():
                      for j in range(self.fragment_per_side)]
         
         image = square_crop_resize(self.paths[index], self.puzzle_size)
-        fragments = [image[f]/255*2-1 for f in f_coord]
+        fragments = [image[f]/255.*2-1 for f in f_coord]
         
         return fragments
 
