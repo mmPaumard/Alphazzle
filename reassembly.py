@@ -6,8 +6,6 @@ import torch
 import torch.nn as nn
 
 from datetime import date
-from PIL import Image
-from poutyne.framework import Model ##replace poutyne @TODO
 from lib.vit_pytorch import ViT
 import pytorch_lightning as pl
 
@@ -392,7 +390,9 @@ if __name__ == '__main__':
     parser.add_argument("-x", "--predict_p", nargs=1)
     parser.add_argument("-y", "--predict_v1", nargs=1)
     parser.add_argument("-z", "--predict_v2", nargs=1)
-    #parser.add_argument("-k", "--empty", nargs=1)
+    parser.add_argument("--dir_train", nargs=1, default="./")
+    parser.add_argument("--dir_val", nargs=1, default="./")
+    parser.add_argument("--dir_global", nargs=1, default="./")
 
     parsed_args = parser.parse_args()
 
@@ -467,9 +467,9 @@ if __name__ == '__main__':
         'fragments_nb': NB_FRAG_PER_SIDE**2,
         'position_nb': NB_FRAG_PER_SIDE**2,
 
-        'dir_train': '/home/david/Bases/fp_puzzles/dataset_train/',
-        'dir_valid': '/home/david/Bases/fp_puzzles/dataset_val/',
-        'dir_global': '/home/david/Bases/fp_puzzles/',
+        'dir_train': parsed_args.dir_train,
+        'dir_valid': parsed_args.dir_val,
+        'dir_global': parsed_args.dir_global,
         'checkpoint': './temp/',
         'p_weight_path': P_WEIGHT,
         'v_weight_path': V_WEIGHT,
