@@ -227,6 +227,7 @@ def make_reassemblies(args, model_p, model_v, nb_img=None):
 
     if VERBOSE: print("===== EVALUATE PUZZ =====")
     # get the total number of puzzles
+    print('from dir {}'.format(args['dir_valid']))
     if nb_img==None: nb_img = len(os.listdir(args['dir_valid']))
 
     score_reas = [0,0,0]
@@ -390,9 +391,9 @@ if __name__ == '__main__':
     parser.add_argument("-x", "--predict_p", nargs=1)
     parser.add_argument("-y", "--predict_v1", nargs=1)
     parser.add_argument("-z", "--predict_v2", nargs=1)
-    parser.add_argument("--dir_train", nargs=1, default="./")
-    parser.add_argument("--dir_val", nargs=1, default="./")
-    parser.add_argument("--dir_global", nargs=1, default="./")
+    parser.add_argument("--dir_train", nargs=1, default="../dataset_train")
+    parser.add_argument("--dir_valid", nargs=1, default="../dataset_val")
+    parser.add_argument("--dir_global", nargs=1, default="../")
 
     parsed_args = parser.parse_args()
 
@@ -468,7 +469,7 @@ if __name__ == '__main__':
         'position_nb': NB_FRAG_PER_SIDE**2,
 
         'dir_train': parsed_args.dir_train,
-        'dir_valid': parsed_args.dir_val,
+        'dir_valid': parsed_args.dir_valid,
         'dir_global': parsed_args.dir_global,
         'checkpoint': './temp/',
         'p_weight_path': P_WEIGHT,
