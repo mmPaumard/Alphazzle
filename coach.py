@@ -1,14 +1,6 @@
 import numpy as np
-import random
-import time, os, sys
-
-from collections import deque
-from pickle import Pickler, Unpickler
-from random import shuffle
 
 from mcts import MCTS
-from pretrainer import normalize_list
-from lib.puzzles_generator_MET import prepare_data_p, prepare_data_v, prepare_fragments
 from lib.utils import sigmoid, softmax
 
 DATASET_PATH = '../datasets/MET/'
@@ -72,11 +64,8 @@ class Coach():
                 score_n = self.game.result_neighbors(current_puzzle, solution_dict)
 
                 if self.args["orders"]>1:
-                    puz_img = self.game.full_puzzle_img(current_puzzle, fragments)
-                    x = np.array(puz_img)
-                    if not self.args['wrn']:
-                        x = normalize_list(x)
-                    v = sigmoid(self.nnet_v.predict(x))[0][0]
+                    nn_puzzle = self.game.vnet_input(current_puzzle, fragments)
+                    v = sigmoid(self.nnet_v(nn_puzzle).detach().cpu().numpy()[0])
                 else: v = 0
 
                 return trainExamples, score_f, score_r, score_n, v
@@ -167,11 +156,9 @@ class Coach():
             episodeStep += 1
             temp = int(episodeStep < self.args['tempThreshold'])
 
-            puz_img, frag_img = self.game.nnet_input(current_puzzle, fragments)
-            if not self.args['wrn']:
-                puz_img = normalize_list(puz_img)
-                frag_img = normalize_list(frag_img)
-            r = softmax(self.nnet_p.predict([puz_img, frag_img]))[0]
+            nn_puzzle = self.game.pnet_input(current_puzzle, fragments)
+            x1 = nn_puzzle
+            r = softmax(self.nnet_p(x1).detach().cpu().numpy()[0])
             pi = self.mcts.getActionProb(current_puzzle, fragments, solution_dict, temp=temp)
             rsorted = np.argsort(r)[::-1]
             loop_continue = True
@@ -238,15 +225,8 @@ class Coach():
 
             for i in validmoves:
                 temp_current_puzzle = self.game.get_next_state(current_puzzle, i)
-                try:
-                    puz_img, _ = self.game.nnet_input(temp_current_puzzle, fragments)
-                except AssertionError:
-                    puz_img = self.game.full_puzzle_img(temp_current_puzzle, fragments)
-
-                x = np.array(puz_img)
-                if not self.args['wrn']:
-                    x = normalize_list(x)
-                v[i] = sigmoid(self.nnet_v.predict(x))[0][0]
+                nn_puzzle = self.game.vnet_input(temp_current_puzzle, fragments)
+                v[i] = sigmoid(self.nnet_v(nn_puzzle).detach().cpu().numpy()[0])
 
             action = np.argmax(v)
             current_puzzle = self.game.get_next_state(current_puzzle, action)
