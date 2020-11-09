@@ -71,7 +71,7 @@ class MCTS():
         probs = [x/float(sum(counts)) for x in counts]
         return probs
 
-    def search(self, current_puzzle, fragments, solution_dict, verbose=True):
+    def search(self, current_puzzle, fragments, solution_dict, verbose=False):
         """
         This function performs one iteration of MCTS. It is recursively called
         till a leaf node is found. The action chosen at each node is one that
