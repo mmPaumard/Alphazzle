@@ -178,7 +178,7 @@ class prepare_fragments():
 
     def __init__(self, path, phase="train", puzzle_size=80, fragment_per_side=2, fragment_size=40,  space=0, nb_helpers=2, first_center=False):
         
-        assert puzzle_size==fragment_per_side*fragment_size+(fragment_per_side-1)*space
+        assert puzzle_size==fragment_per_side*fragment_size+(fragment_per_side)*space
         assert phase in ["train", "val", "test"]
         
         root_dir = os.path.join(path+"dataset_"+phase)

@@ -1,5 +1,6 @@
 import copy
 import numpy as np
+import torch
 
 from observable_state import State
 
@@ -172,17 +173,28 @@ class Game():
         return str(puzzle)
 
 
-    def nnet_input(self, current_fdict, fragments, verbose=False):
+    def pnet_input(self, current_fdict, fragments, verbose=False):
         """Returns the np array of the puzzle"""
         fragments_nb = len(current_fdict)
         s = State(self.puzzle_size, self.fragment_size, fragments_nb, copy.deepcopy(current_fdict), space=self.space)
         if verbose: print(s.remaining_fragments_idx, current_puzzle)
         assert(s.get_remaining_fragments() != [])
 
-        nnet_puzzle = s.get_current_puzzle_img(fragments).transpose(2,0,1)
         nnet_fragment = s.get_next_fragment_img(fragments).transpose(2,0,1)
 
-        return nnet_puzzle.astype(np.float32).reshape(1,3,self.puzzle_size,self.puzzle_size), nnet_fragment.astype(np.float32).reshape(1,3,self.fragment_size,self.fragment_size)
+        return torch.tensor(nnet_fragment.reshape(1, 3, self.puzzle_size+self.space+self.fragment_size, self.puzzle_size+self.space+self.fragment_size)).cuda()
+        # return nnet_puzzle.astype(np.float32).reshape(1,3,self.puzzle_size,self.puzzle_size), nnet_fragment.astype(np.float32).reshape(1,3,self.fragment_size,self.fragment_size)
+
+    def vnet_input(self, current_fdict, fragments, verbose=False):
+        """Returns the np array of the puzzle"""
+        fragments_nb = len(current_fdict)
+        s = State(self.puzzle_size, self.fragment_size, fragments_nb, copy.deepcopy(current_fdict), space=self.space)
+        if verbose: print(s.remaining_fragments_idx, current_puzzle)
+
+        nnet_puzzle = s.get_current_puzzle_img(fragments).transpose(2,0,1)
+        nnet_puzzle = nnet_puzzle.reshape(1, 3, self.puzzle_size, self.puzzle_size)
+
+        return torch.tensor(nnet_puzzle).cuda()
 
 
     def full_puzzle_img(self, current_fdict, fragments):

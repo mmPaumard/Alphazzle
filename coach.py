@@ -55,9 +55,9 @@ class Coach():
             episodeStep += 1
             temp = int(episodeStep < self.args['tempThreshold'])
 
-            puz_img, frag_img = self.game.nnet_input(current_puzzle, fragments)
+            puz_img = self.game.pnet_input(current_puzzle, fragments)
             pi = self.mcts.getActionProb(current_puzzle, fragments, solution_dict, temp=temp)
-            trainExamples.append([puz_img, frag_img, pi])
+            trainExamples.append([puz_img, pi])
 
             if inference_mode:
                 action = np.argmax(pi)

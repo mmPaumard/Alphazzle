@@ -8,6 +8,9 @@ import torch.nn as nn
 from datetime import date
 from PIL import Image
 from poutyne.framework import Model ##replace poutyne @TODO
+from lib.vit_pytorch import ViT
+import pytorch_lightning as pl
+
 from torch.optim import Adam
 
 from game import Game
@@ -18,11 +21,6 @@ from lib.wide_resnet_torch import create_model
 
 np.set_printoptions(precision=2)
 
-options_for_defining_WRN_28_4 = {
-    "depth": 28,
-    "widen_factor": 4,
-    "pool": "none"
-}
 
 ################################################################################
 
@@ -36,64 +34,139 @@ def prepare_nnets(args):
         torchvision.models: P and V neural networks, with their weights
     """
 
+    DATASET_PATH=args['dir_global']
+    PUZZLE_SIZE=args['puzzle_size']
+    NB_FRAG = args['fragment_per_side']
+    FRAG_SIZE = args['fragment_size']
+    SPACE_SIZE = args['space_size']
+    CONV_HEAD = args['conv_head']
+
     if VERBOSE: print('===== PREPARE NNETS =====')
-    ##### Prepare data for P ########
-    dataset_train_p = prepare_data_p(path=args['dir_global'], phase="train",
-                                     puzzle_size=args['puzzle_size'],
-                                     fragment_per_side=args['fragment_per_side'],
-                                     fragment_size=args['fragment_size'],
-                                     space=args['space_size'],
-                                     nb_helpers=args['numHelp'])
-    x,_ = dataset_train_p[0]
-    x1, x2 = x
-    if VERBOSE: print('dataset loaded')
+    img_size = (NB_FRAG+1)*(FRAG_SIZE+SPACE_SIZE)
+    frg_size = FRAG_SIZE+SPACE_SIZE
 
-    ## Prepare the neural networks ##
-    if args['wrn']:
-        WRN_28_4 = create_model(options_for_defining_WRN_28_4)
-        feature_extractor = nn.Sequential(WRN_28_4,nn.MaxPool2d(2),nn.Flatten())
-    else:
-        resnet18 = models.resnet18(pretrained=True)
-        resnet18.fc = nn.Identity() # removing classification layer
-        feature_extractor = resnet18
-
-    v1, v2 = feature_extractor(torch.tensor(x1)), feature_extractor(torch.tensor(x2))
-    img_size, frg_size = v1.shape[1], v2.shape[1]
-
+    print(img_size, frg_size, SPACE_SIZE)
     ### Prepare neural network P ####
-    if args['wrn']:
-        model = ModelP(wrn=WRN_28_4, nb_out=args['fragments_nb'],           img_size=img_size, frg_size=frg_size)
-    else:
-        model = ModelPPretrained(base=feature_extractor, nb_out=NB_FRAG**2, img_size=img_size, frg_size=frg_size)
-    adam = Adam(model.parameters(), lr=0.0001)
-    model_p = Model(model, adam, 'crossentropy', batch_metrics=['accuracy'])
-    model_p.cuda()
 
-    ### Prepare neural network V ####
-    if args['wrn']:
-        model = nn.Sequential(feature_extractor,
-                              nn.Linear(img_size, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 1))
-    else:
-        model = nn.Sequential(feature_extractor,
-                              nn.Linear(img_size, 512), nn.ReLU(),
-                              nn.Linear(512, 512), nn.ReLU(),
-                              nn.Linear(512, 1))
-    adam = Adam(model.parameters(), lr=0.0001)
-    model_v = Model(model, adam, 'BCEWithLogits', batch_metrics=['bin_acc'])
-    model_v.cuda()
-    if VERBOSE: print("architecture loaded")
+    # lightning wrapper
+    class LitModelP(pl.LightningModule):
 
-    model_p.load_weights(args['p_weight_path'])
-    model_v.load_weights(args['v_weight_path'])
+        def __init__(self):
+            super().__init__()
+            self.vit = ViT(image_size=img_size,
+                           patch_size=frg_size,
+                           num_classes=NB_FRAG**2,
+                           dim=1024,
+                           depth=4,
+                           heads=8,
+                           mlp_dim=2048,
+                           conv_head=CONV_HEAD)
+            self.accuracy = pl.metrics.Accuracy()
+
+            self.example_input_array = torch.randn((1, 3, img_size, img_size))
+
+        def forward(self, x):
+            # in lightning, forward defines the prediction/inference actions
+            out = self.vit(x)
+            return out
+
+        def training_step(self, batch, batch_idx):
+            # training_step defined the train loop.
+            # It is independent of forward
+            x, y = batch
+            y_hat = self.vit(x)
+            loss = torch.nn.functional.cross_entropy(y_hat, y)
+            acc = self.accuracy(y_hat, y)
+            # Logging to TensorBoard by default
+            self.log('train_loss', loss, on_epoch=True, on_step=False, logger=True)
+            self.log('train_acc', acc, on_epoch=True, on_step=False, logger=True)
+            return loss
+
+        def validation_step(self, batch, batch_idx):
+            # training_step defined the train loop.
+            # It is independent of forward
+            x, y = batch
+            y_hat = self.vit(x)
+            loss = torch.nn.functional.cross_entropy(y_hat, y)
+            acc = self.accuracy(y_hat, y)
+            # Logging to TensorBoard by default
+            self.log('val_loss', loss, on_epoch=True, on_step=False, logger=True)
+            self.log('val_acc', acc, on_epoch=True, on_step=False, logger=True)
+            return loss
+
+
+        def configure_optimizers(self):
+            optimizer = torch.optim.Adam(self.parameters(), lr=3e-5)
+            return optimizer
+
+    if args['p_weight_path']:
+        model_p = LitModelP.load_from_checkpoint(args['p_weight_path'])
+    else:
+        model_p = LitModelP()
+
+    ## V
+
+    img_size = (NB_FRAG)*(FRAG_SIZE+SPACE_SIZE)
+
+    # lightning wrapper
+    class LitModelV(pl.LightningModule):
+
+        def __init__(self):
+            super().__init__()
+            self.vit = ViT(image_size=img_size,
+                           patch_size=frg_size,
+                           num_classes=1,
+                           dim=1024,
+                           depth=4,
+                           heads=8,
+                           mlp_dim=2048,
+                           conv_head=CONV_HEAD)
+            self.accuracy = pl.metrics.Accuracy()
+
+            self.example_input_array = torch.randn((1, 3, img_size, img_size))
+
+        def forward(self, x):
+            # in lightning, forward defines the prediction/inference actions
+            out = self.vit(x)
+            return out
+
+        def training_step(self, batch, batch_idx):
+            # training_step defined the train loop.
+            # It is independent of forward
+            x, y = batch
+            y_hat = self.vit(x)
+            loss = torch.nn.functional.binary_cross_entropy_with_logits(y_hat, y)
+            acc = self.accuracy(y_hat, y)
+            # Logging to TensorBoard by default
+            self.log('train_loss', loss, on_epoch=True, on_step=False, logger=True)
+            self.log('train_acc', acc, on_epoch=True, on_step=False, logger=True)
+            return loss
+
+        def validation_step(self, batch, batch_idx):
+            # training_step defined the train loop.
+            # It is independent of forward
+            x, y = batch
+            y_hat = self.vit(x)
+            loss = torch.nn.functional.binary_cross_entropy_with_logits(y_hat, y)
+            acc = self.accuracy(y_hat, y)
+            # Logging to TensorBoard by default
+            self.log('val_loss', loss, on_epoch=True, on_step=False, logger=True)
+            self.log('val_acc', acc, on_epoch=True, on_step=False, logger=True)
+            return loss
+
+
+        def configure_optimizers(self):
+            optimizer = torch.optim.Adam(self.parameters(), lr=3e-5)
+            return optimizer
+
+    if args['v_weight_path']:
+        model_v = LitModelV.load_from_checkpoint(args['v_weight_path'])
+    else:
+        model_v = LitModelV()
+
 
     if VERBOSE: print("weights loaded")
-    return model_p, model_v
+    return model_p.cuda(), model_v.cuda()
 
 ################################################################################
 
@@ -292,7 +365,7 @@ if __name__ == '__main__':
     parser.add_argument("-o", "--verb", nargs=1)
     parser.add_argument("-g", "--orders", nargs=1)
     parser.add_argument("-q", "--qsa", nargs=1)
-    parser.add_argument("-w", "--wrn", nargs=1)
+    parser.add_argument("-w", "--conv_head", action="store_true", default=False)
 
     parser.add_argument("-a", "--learn", nargs=1)
     parser.add_argument("-u", "--learnV", nargs=1)
@@ -312,8 +385,8 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--space_size", nargs=1)
     parser.add_argument("-n", "--nb_frag_per_side", nargs=1)
 
-    parser.add_argument("-p", "--p_end", nargs=1)
-    parser.add_argument("-v", "--v_end", nargs=1)
+    parser.add_argument("-p", "--p_weight", nargs=1)
+    parser.add_argument("-v", "--v_weight", nargs=1)
 
     parser.add_argument("-j", "--inference", nargs=1)
     parser.add_argument("-x", "--predict_p", nargs=1)
@@ -327,7 +400,7 @@ if __name__ == '__main__':
     VERBOSE = int(parsed_args.verb[0]) if parsed_args.verb else 1
     ORDERS = int(parsed_args.orders[0]) if parsed_args.orders else 1
     QSA = int(parsed_args.qsa[0]) if parsed_args.qsa else 0
-    WRN = int(parsed_args.wrn[0]) if parsed_args.wrn else 1
+    CONV_HEAD = parsed_args.conv_head
 
     global LEARN, LEARNV, SBTRAIN, SBVAL
     LEARN = int(parsed_args.learn[0]) if parsed_args.learn else 0
@@ -353,10 +426,10 @@ if __name__ == '__main__':
 
     global STRUCT, P_WEIGHT, V_WEIGHT
     STRUCT = str(FRAG_SIZE)+("-"+str(SPACE_SIZE)+"-"+str(FRAG_SIZE))*(NB_FRAG_PER_SIDE-1)+"_"
-    p_end = parsed_args.p_end[0] if parsed_args.p_end else None
-    v_end = parsed_args.v_end[0] if parsed_args.v_end else None
-    P_WEIGHT = './saved_models/p_'+STRUCT+p_end+'.h5'
-    V_WEIGHT = './saved_models/v_'+STRUCT+v_end+'.h5'
+    p_weight = parsed_args.p_weight[0] if parsed_args.p_weight else None
+    v_weight = parsed_args.v_weight[0] if parsed_args.v_weight else None
+    P_WEIGHT = p_weight
+    V_WEIGHT = v_weight
 
     global DISABLE_P, DISABLE_V1, DISABLE_V2, INFERENCE
     INFERENCE = bool(int(parsed_args.inference[0])) if parsed_args.inference else True
@@ -364,10 +437,10 @@ if __name__ == '__main__':
     DISABLE_V1 = int(parsed_args.predict_v1[0]) if parsed_args.predict_v1 else 0
     DISABLE_V2 = int(parsed_args.predict_v2[0]) if parsed_args.predict_v2 else 0
 
-    assert P_WEIGHT[15:] in os.listdir('saved_models')
-    assert V_WEIGHT[15:] in os.listdir('saved_models')
+    # assert P_WEIGHT[15:] in os.listdir('saved_models')
+    # assert V_WEIGHT[15:] in os.listdir('saved_models')
 
-    print('verbose, nb_order, useQSA, useWRN:', VERBOSE, ORDERS, QSA, WRN)
+    print('verbose, nb_order, useQSA, useWRN:', VERBOSE, ORDERS, QSA, CONV_HEAD)
     print('finetuning (learn, learnVtoo, batchtrain, batchval):', LEARN, LEARNV, SBTRAIN, SBVAL)
     print('parameters (lambda, help, mcts, temp, centralf):', LAMBDA, NB_HELP, NB_MCTS, TEMP, CENTRAL_FRAGMENT)
     print('epochs and iters:', NB_EPOCHS, NB_ITERS)
@@ -390,13 +463,13 @@ if __name__ == '__main__':
         'fragment_size': FRAG_SIZE,
         'space_size': SPACE_SIZE,
         'fragment_per_side': NB_FRAG_PER_SIDE,
-        'puzzle_size': FRAG_SIZE*NB_FRAG_PER_SIDE+SPACE_SIZE*(NB_FRAG_PER_SIDE-1),
+        'puzzle_size': FRAG_SIZE*NB_FRAG_PER_SIDE+SPACE_SIZE*(NB_FRAG_PER_SIDE),
         'fragments_nb': NB_FRAG_PER_SIDE**2,
         'position_nb': NB_FRAG_PER_SIDE**2,
 
-        'dir_train': '../datasets/MET/dataset_train/',
-        'dir_valid': '../datasets/MET/dataset_val/',
-        'dir_global': '../datasets/MET/',
+        'dir_train': '/home/david/Bases/fp_puzzles/dataset_train/',
+        'dir_valid': '/home/david/Bases/fp_puzzles/dataset_val/',
+        'dir_global': '/home/david/Bases/fp_puzzles/',
         'checkpoint': './temp/',
         'p_weight_path': P_WEIGHT,
         'v_weight_path': V_WEIGHT,
@@ -415,7 +488,7 @@ if __name__ == '__main__':
         'orders': ORDERS,
         'useQSA': QSA,
         'struct': STRUCT,
-        'wrn':WRN
+        'conv_head': CONV_HEAD
     }
 
     main(args)

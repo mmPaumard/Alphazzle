@@ -126,11 +126,19 @@ class State():
     def get_next_fragment_img(self, fragments, verbose=False):
         """Returns the np array of the next fragment"""
         if verbose: print(self.get_next_fragment_idx())
-        return fragments[self.get_next_fragment_idx()]
+        f = self.fragment_size
+        s = self.space
+        p = self.puzzle_size
+        img = self.get_current_puzzle_img(fragments)
+        out = np.zeros((f+s+p, f+s+p, 3), dtype=np.float32)
+        out[f+s:f+s+p, f+s:f+s+p, :] = img
+        frag = fragments[self.get_next_fragment_idx()]
+        out[s:s+f, s:s+f, :] = frag
+        return out
 
     def get_current_puzzle_img(self, fragments):
         """Returns the np array of the puzzle"""
-        puzzle = np.zeros((self.puzzle_size, self.puzzle_size, 3))
+        puzzle = np.zeros((self.puzzle_size, self.puzzle_size, 3), dtype=np.float32)
         try:
             for k, idx in enumerate(self.get_puzzle_idx()):
                 if idx!=-1:
@@ -138,7 +146,7 @@ class State():
                     y_max = int(y_min + self.fragment_size)
                     x_min = int((self.fragment_size+self.space)*(k%self.nb_per_side))
                     x_max = int(x_min + self.fragment_size)
-                    puzzle[y_min: y_max, x_min:x_max,:] = fragments[idx]
+                    puzzle[y_min+self.space//2:y_max+self.space//2, x_min+self.space//2:x_max+self.space//2,:] = fragments[idx]
         except TypeError:
             print(y_min, y_max, x_min, x_max)
             print(puzzle.shape)
