@@ -468,9 +468,9 @@ if __name__ == '__main__':
         'fragments_nb': NB_FRAG_PER_SIDE**2,
         'position_nb': NB_FRAG_PER_SIDE**2,
 
-        'dir_train': parsed_args.dir_train,
-        'dir_valid': parsed_args.dir_valid,
-        'dir_global': parsed_args.dir_global,
+        'dir_train': parsed_args.dir_train[0],
+        'dir_valid': parsed_args.dir_valid[0],
+        'dir_global': parsed_args.dir_global[0],
         'checkpoint': './temp/',
         'p_weight_path': P_WEIGHT,
         'v_weight_path': V_WEIGHT,
