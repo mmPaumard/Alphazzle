@@ -66,7 +66,7 @@ class LitModelV(pl.LightningModule):
         loss = torch.nn.functional.binary_cross_entropy(y_hat, y)
         # loss = torch.nn.functional.mse_loss(y_hat, y) + torch.nn.functional.l1_loss(y_hat, y)
         y_hat = (y_hat > 0.5).float()
-        acc = (y_hat == y).sum()/x.shape[0]
+        acc = (y_hat == y).sum().item()/x.shape[0]
         # Logging to TensorBoard by default
         self.log('train_loss', loss, on_epoch=True, on_step=False, logger=True)
         self.log('train_acc', acc, on_epoch=True, on_step=False, logger=True)
@@ -79,7 +79,7 @@ class LitModelV(pl.LightningModule):
         loss = torch.nn.functional.binary_cross_entropy(y_hat, y)
         # loss = torch.nn.functional.mse_loss(y_hat, y) + torch.nn.functional.l1_loss(y_hat, y)
         y_hat = (y_hat > 0.5).float()
-        acc = (y_hat == y).sum()/x.shape[0]
+        acc = (y_hat == y).sum().item()/x.shape[0]
         # Logging to TensorBoard by default
         self.log('val_loss', loss, on_epoch=True, on_step=False, logger=True)
         self.log('val_acc', acc, on_epoch=True, on_step=False, logger=True)
