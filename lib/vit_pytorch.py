@@ -127,13 +127,13 @@ class ConvHead(nn.Module):
         self.rdim = self.resnet(torch.randn(1, 3, patch_size, patch_size)).shape[1]
         print('rdim: {}'.format(self.rdim))
         self.lin = nn.Linear(self.rdim, self.dim)
-        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
+        self.normalize = nn.Sequential(transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225]))
 
     def forward(self, x):
         b, p, d = x.shape
         x = x.view(-1, 3, self.patch_size, self.patch_size)
-        # x = self.normalize(x)
+        x = self.normalize(x)
         x = self.resnet(x)
         x = x.view(b, p, self.rdim)
         x = self.lin(x)
