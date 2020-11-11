@@ -87,9 +87,9 @@ def color(image):
     return image
 
 
-def square_crop_resize(path, img_size, da=False):
+def square_crop_resize(bytes, img_size, da=False):
     # Read the image.
-    image = Image.open(path)
+    image = Image.open(bytes)
     image = ImageOps.autocontrast(image)
 
     # Resize if needed.

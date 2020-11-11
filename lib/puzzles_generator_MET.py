@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import os
 import random
+import io
 
 from lib.clean_images import square_crop_resize
 
@@ -215,6 +216,7 @@ class prepare_fragments():
         self.nb_helpers = nb_helpers
         self.first_center = first_center
         self.data_aug = data_aug
+        self.image_map = {}
         
     def __len__(self):
         return len(self.paths)
@@ -228,8 +230,15 @@ class prepare_fragments():
                          self.fragment_size*(j+1)+self.space*(j)+sp,
                   :] for i in range(self.fragment_per_side)
                      for j in range(self.fragment_per_side)]
-        
-        image = square_crop_resize(self.paths[index], self.puzzle_size, da=self.data_aug)
+
+        if self.paths[index] in self.image_map:
+            bytes = self.image_map[self.paths[index]]
+        else:
+            with io.open(self.paths[index], 'rb', buffering=0) as f:
+                bytes = io.BytesIO(f.read())
+                self.image_map[self.paths[index]] = bytes
+
+        image = square_crop_resize(bytes, self.puzzle_size, da=self.data_aug)
         fragments = [image[f] for f in f_coord]
         
         return fragments
