@@ -133,7 +133,7 @@ class ConvHead(nn.Module):
     def forward(self, x):
         b, p, d = x.shape
         x = x.view(-1, 3, self.patch_size, self.patch_size)
-        x = self.normalize(x)
+        # x = self.normalize(x)
         x = self.resnet(x)
         x = x.view(b, p, self.rdim)
         x = self.lin(x)
