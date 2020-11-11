@@ -8,6 +8,7 @@ import torch.nn as nn
 from datetime import date
 from lib.vit_pytorch import ViT
 import pytorch_lightning as pl
+from lib.nn_architectures import LitModelP, LitModelV
 
 from torch.optim import Adam
 
@@ -22,7 +23,7 @@ np.set_printoptions(precision=2)
 
 ################################################################################
 
-def prepare_nnets(args):
+def prepare_nnets(args, VERBOSE=False):
     """Initializes the neural networks.
 
     Parameters:
@@ -47,120 +48,24 @@ def prepare_nnets(args):
     ### Prepare neural network P ####
 
     # lightning wrapper
-    class LitModelP(pl.LightningModule):
-
-        def __init__(self):
-            super().__init__()
-            self.vit = ViT(image_size=img_size,
-                           patch_size=frg_size,
-                           num_classes=NB_FRAG**2,
-                           dim=1024,
-                           depth=4,
-                           heads=8,
-                           mlp_dim=2048,
-                           conv_head=CONV_HEAD)
-            self.accuracy = pl.metrics.Accuracy()
-
-            self.example_input_array = torch.randn((1, 3, img_size, img_size))
-
-        def forward(self, x):
-            # in lightning, forward defines the prediction/inference actions
-            out = self.vit(x)
-            return out
-
-        def training_step(self, batch, batch_idx):
-            # training_step defined the train loop.
-            # It is independent of forward
-            x, y = batch
-            y_hat = self.vit(x)
-            loss = torch.nn.functional.cross_entropy(y_hat, y)
-            acc = self.accuracy(y_hat, y)
-            # Logging to TensorBoard by default
-            self.log('train_loss', loss, on_epoch=True, on_step=False, logger=True)
-            self.log('train_acc', acc, on_epoch=True, on_step=False, logger=True)
-            return loss
-
-        def validation_step(self, batch, batch_idx):
-            # training_step defined the train loop.
-            # It is independent of forward
-            x, y = batch
-            y_hat = self.vit(x)
-            loss = torch.nn.functional.cross_entropy(y_hat, y)
-            acc = self.accuracy(y_hat, y)
-            # Logging to TensorBoard by default
-            self.log('val_loss', loss, on_epoch=True, on_step=False, logger=True)
-            self.log('val_acc', acc, on_epoch=True, on_step=False, logger=True)
-            return loss
-
-
-        def configure_optimizers(self):
-            optimizer = torch.optim.Adam(self.parameters(), lr=3e-5)
-            return optimizer
 
     if args['p_weight_path']:
-        model_p = LitModelP.load_from_checkpoint(args['p_weight_path'])
+        model_p = LitModelP.load_from_checkpoint(args['p_weight_path'], img_size=img_size, frg_size=frg_size, CONV_HEAD=CONV_HEAD, NB_FRAG=NB_FRAG)
+        print('p weights loaded from {}'.format(args['p_weight_path']))
     else:
-        model_p = LitModelP()
+        model_p = LitModelP(img_size, frg_size, CONV_HEAD, NB_FRAG)
 
     ## V
 
     img_size = (NB_FRAG)*(FRAG_SIZE+SPACE_SIZE)
 
     # lightning wrapper
-    class LitModelV(pl.LightningModule):
-
-        def __init__(self):
-            super().__init__()
-            self.vit = ViT(image_size=img_size,
-                           patch_size=frg_size,
-                           num_classes=1,
-                           dim=1024,
-                           depth=4,
-                           heads=8,
-                           mlp_dim=2048,
-                           conv_head=CONV_HEAD)
-            self.accuracy = pl.metrics.Accuracy()
-
-            self.example_input_array = torch.randn((1, 3, img_size, img_size))
-
-        def forward(self, x):
-            # in lightning, forward defines the prediction/inference actions
-            out = self.vit(x)
-            return out
-
-        def training_step(self, batch, batch_idx):
-            # training_step defined the train loop.
-            # It is independent of forward
-            x, y = batch
-            y_hat = self.vit(x)
-            loss = torch.nn.functional.binary_cross_entropy_with_logits(y_hat, y)
-            acc = self.accuracy(y_hat, y)
-            # Logging to TensorBoard by default
-            self.log('train_loss', loss, on_epoch=True, on_step=False, logger=True)
-            self.log('train_acc', acc, on_epoch=True, on_step=False, logger=True)
-            return loss
-
-        def validation_step(self, batch, batch_idx):
-            # training_step defined the train loop.
-            # It is independent of forward
-            x, y = batch
-            y_hat = self.vit(x)
-            loss = torch.nn.functional.binary_cross_entropy_with_logits(y_hat, y)
-            acc = self.accuracy(y_hat, y)
-            # Logging to TensorBoard by default
-            self.log('val_loss', loss, on_epoch=True, on_step=False, logger=True)
-            self.log('val_acc', acc, on_epoch=True, on_step=False, logger=True)
-            return loss
-
-
-        def configure_optimizers(self):
-            optimizer = torch.optim.Adam(self.parameters(), lr=3e-5)
-            return optimizer
 
     if args['v_weight_path']:
-        model_v = LitModelV.load_from_checkpoint(args['v_weight_path'])
+        model_v = LitModelV.load_from_checkpoint(args['v_weight_path'], img_size=img_size, frg_size=frg_size, CONV_HEAD=CONV_HEAD)
+        print('v weights loaded from {}'.format(args['v_weight_path']))
     else:
-        model_v = LitModelV()
+        model_v = LitModelV(img_size, frg_size, CONV_HEAD)
 
 
     if VERBOSE: print("weights loaded")
@@ -252,7 +157,7 @@ def make_reassemblies(args, model_p, model_v, nb_img=None):
             scores = c.executeEpisode(fragments, solution_dict,
                                       nb_help=args['numHelp'],
                                       inference_mode=args['inference'],
-                                      verbose=False)
+                                      verbose=True)
             _,f,r,n,v = scores
             frag_ok_minus_help = int(f*args['fragments_nb']) - args['numHelp']
             f = frag_ok_minus_help/(args['fragments_nb']-args['numHelp'])
@@ -447,7 +352,7 @@ if __name__ == '__main__':
     print('epochs and iters:', NB_EPOCHS, NB_ITERS)
     print('puzzle shape (f,s,qt):', FRAG_SIZE, SPACE_SIZE, NB_FRAG_PER_SIDE)
     print('nnets:', P_WEIGHT, V_WEIGHT)
-    print('inference, disable P/V1/V2:', DISABLE_P, DISABLE_V1, DISABLE_V2, INFERENCE)
+    print('inference, disable P/V1/V2:', INFERENCE, DISABLE_P, DISABLE_V1, DISABLE_V2)
 
     args = {
         'lambda': LAMBDA, #cpuct

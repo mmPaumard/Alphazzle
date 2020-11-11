@@ -21,7 +21,7 @@ class State():
 
         self.puzzle_size = puzzle_size
         self.fragment_size = fragment_size
-        self.nb_per_side = np.sqrt(fragments_nb)
+        self.nb_per_side = int(np.sqrt(fragments_nb))
         self.nb_positions = fragments_nb
         self.space = space
 
@@ -132,8 +132,10 @@ class State():
         img = self.get_current_puzzle_img(fragments)
         out = np.zeros((f+s+p, f+s+p, 3), dtype=np.float32)
         out[f+s:f+s+p, f+s:f+s+p, :] = img
-        frag = fragments[self.get_next_fragment_idx()]
-        out[s:s+f, s:s+f, :] = frag
+        frag = fragments[self.get_next_fragment_idx(), ...].squeeze()
+        for i in range(self.nb_per_side+1):
+            out[s//2+i*(f+s):s//2+i*(f+s)+f, s//2:s//2+f, :] = frag
+            out[ s//2:s//2+f,s//2+i*(f+s):s//2+i*(f+s)+f, :] = frag
         return out
 
     def get_current_puzzle_img(self, fragments):

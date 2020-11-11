@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from PIL import Image
+from PIL import Image, ImageOps
 from scipy import misc
 
 import glob
@@ -14,7 +14,7 @@ import torch
 import torchvision.transforms as transforms
 
 
-def resize_image(image, min_size):
+def resize_image(image, min_size, da=False):
     """Resize if needed.
 
     Args:
@@ -27,6 +27,11 @@ def resize_image(image, min_size):
 
     height = image.height
     width = image.width
+
+    if da:
+        height = int(height*(1+0.2*np.random.randn()))
+        width = int(width*(1+0.2*np.random.randn()))
+        image = image.resize(size=(width, height))
     
     if ((height != min_size and width != min_size) or
         (height == min_size and width < min_size) or
@@ -75,18 +80,27 @@ def trans(image):
 
     return image
 
+def color(image):
+    if np.random.rand() > 0.5:
+        rgb = [[1.+np.random.randn(3)*0.1]]
+        image *= rgb
+    return image
+
+
 def square_crop_resize(path, img_size, da=False):
     # Read the image.
     image = Image.open(path)
+    image = ImageOps.autocontrast(image)
 
     # Resize if needed.
-    image = np.array(resize_image(image, img_size))
+    image = np.array(resize_image(image, img_size, da))/255.
 
     # Convert the image to RGB if needed.
     image = convert2rgb(image)
 
     if da:
         image = trans(image)
+        image = color(image)
     
     # Get a square-crop of the image.
     height = len(image)
@@ -96,11 +110,17 @@ def square_crop_resize(path, img_size, da=False):
 
     if smallest_is_width:
         h_remaining_space = height - img_size
-        offset = np.random.randint(h_remaining_space+1)
+        if da:
+            offset = np.random.randint(h_remaining_space+1)
+        else:
+            offset = 0
         image = image[offset:img_size+offset,:,:3]
     else:
         w_remaining_space = width - img_size
-        offset = np.random.randint(w_remaining_space+1)
+        if da:
+            offset = np.random.randint(w_remaining_space+1)
+        else:
+            offset = w_remaining_space//2
         image = image[:,offset:img_size+offset,:3]
     
     return image

@@ -2,7 +2,7 @@ import argparse
 import torch
 from lib.puzzles_generator_MET import prepare_data_p
 
-from lib.vit_pytorch import ViT
+from lib.nn_architectures import LitModelP
 
 import pytorch_lightning as pl
 
@@ -20,80 +20,19 @@ def main():
 
 
 
-    x,_ = dataset_train_p[0]
+    x,_, _ = dataset_train_p[0]
     img_size = x.shape[2]
     frg_size = FRAG_SIZE+SPACE_SIZE
 
     ### Prepare neural network P ####
+    model_p = LitModelP(img_size, frg_size, CONV_HEAD, NB_FRAG)
 
-    model = ViT(
-        image_size=img_size,
-        patch_size=frg_size,
-        num_classes=NB_FRAG**2,
-        dim=1024,
-        depth=6,
-        heads=8,
-        mlp_dim=2048
-    )
-
-    # lightning wrapper
-    class LitModelP(pl.LightningModule):
-
-        def __init__(self):
-            super().__init__()
-            self.vit = ViT(image_size=img_size,
-                           patch_size=frg_size,
-                           num_classes=NB_FRAG**2,
-                           dim=1024,
-                           depth=4,
-                           heads=8,
-                           mlp_dim=2048,
-                           conv_head=CONV_HEAD)
-            self.accuracy = pl.metrics.Accuracy()
-
-            self.example_input_array = torch.randn((1, 3, img_size, img_size))
-
-        def forward(self, x):
-            # in lightning, forward defines the prediction/inference actions
-            out = self.vit(x)
-            return out
-
-        def training_step(self, batch, batch_idx):
-            # training_step defined the train loop.
-            # It is independent of forward
-            x, y = batch
-            y_hat = self.vit(x)
-            loss = torch.nn.functional.cross_entropy(y_hat, y)
-            acc = self.accuracy(y_hat, y)
-            # Logging to TensorBoard by default
-            self.log('train_loss', loss, on_epoch=True, on_step=False, logger=True)
-            self.log('train_acc', acc, on_epoch=True, on_step=False, logger=True)
-            return loss
-
-        def validation_step(self, batch, batch_idx):
-            # training_step defined the train loop.
-            # It is independent of forward
-            x, y = batch
-            y_hat = self.vit(x)
-            loss = torch.nn.functional.cross_entropy(y_hat, y)
-            acc = self.accuracy(y_hat, y)
-            # Logging to TensorBoard by default
-            self.log('val_loss', loss, on_epoch=True, on_step=False, logger=True)
-            self.log('val_acc', acc, on_epoch=True, on_step=False, logger=True)
-            return loss
-
-
-        def configure_optimizers(self):
-            optimizer = torch.optim.Adam(self.parameters(), lr=3e-5)
-            return optimizer
-
-    model_p = LitModelP()
-
-    train = torch.utils.data.DataLoader(dataset_train_p, batch_size=128, num_workers=6)
+    train = torch.utils.data.DataLoader(dataset_train_p, batch_size=64, num_workers=6)
     val = torch.utils.data.DataLoader(dataset_valid_p, batch_size=64, num_workers=6)
 
     logger = pl.loggers.TensorBoardLogger('tb_logs', name='model_p_'+STRUCT)
-    trainer = pl.Trainer(gpus=1, logger=logger, weights_summary='full', max_epochs=NB_EPOCHS)
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(monitor='val_loss', filename='model_p-{epoch:03d}-{val_loss:.3f}', save_top_k=3, mode='min')
+    trainer = pl.Trainer(gpus=1, logger=logger, weights_summary='full', max_epochs=NB_EPOCHS, callbacks=[checkpoint_callback])
     trainer.fit(model_p, train_dataloader=train, val_dataloaders=val)
     trainer.save_checkpoint(logger.log_dir + '/model_p_final_checkpoint.ckpt')
 

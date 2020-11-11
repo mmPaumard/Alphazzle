@@ -1,5 +1,150 @@
 import torch
 import torch.nn as nn
+import pytorch_lightning as pl
+from lib.vit_pytorch import ViT
+from torchvision.models import resnet18
+from torchvision import transforms
+
+# model = ViT(
+#     image_size=img_size,
+#     patch_size=frg_size,
+#     num_classes=NB_FRAG ** 2,
+#     dim=1024,
+#     depth=6,
+#     heads=8,
+#     mlp_dim=2048
+# )
+
+
+# lightning wrapper
+class LitModelV(pl.LightningModule):
+
+    def __init__(self, img_size, frg_size, CONV_HEAD):
+        super().__init__()
+        self.vit = ViT(image_size=img_size,
+                       patch_size=frg_size,
+                       num_classes=1,
+                       dim=64,
+                       depth=6,
+                       heads=2,
+                       mlp_dim=128,
+                       conv_head=CONV_HEAD,
+                       dropout=0.,
+                       emb_dropout=0.)
+        # self.vit = resnet18(pretrained=True)
+        # self.vit.train(False)
+        # self.vit.requires_grad = False
+        # self.vit.fc = nn.Identity()
+        # # self.resnet.requires_grad = False
+        # self.rdim = self.vit(torch.randn(1, 3, 64, 64)).shape[1]
+        # print('rdim: {}'.format(self.rdim))
+        # self.vit.fc = nn.Linear(self.rdim, 1)
+        # self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+        #                          std=[0.229, 0.224, 0.225])
+
+        self.example_input_array = torch.randn((1, 3, img_size, img_size))
+        self.learning_rate = 4e-5
+
+    def forward(self, x, mask=None):
+        # in lightning, forward defines the prediction/inference actions
+        # x = self.normalize(x)
+        if mask is not None:
+            # print(mask.view(x.shape[0],-1).sum(dim=1))
+            if mask.sum().item() > 0:
+                mask = mask.bool()
+            else:
+                mask = None
+        out = self.vit(x, mask)
+        return torch.sigmoid(out)
+
+    def training_step(self, batch, batch_idx):
+        # training_step defined the train loop.
+        # It is independent of forward
+        x, y, mask = batch
+        y_hat = self.forward(x, mask)
+        y = y.type_as(y_hat)
+        loss = torch.nn.functional.binary_cross_entropy(y_hat, y)
+        # loss = torch.nn.functional.mse_loss(y_hat, y) + torch.nn.functional.l1_loss(y_hat, y)
+        y_hat = (y_hat > 0.5).float()
+        acc = (y_hat == y).sum()/x.shape[0]
+        # Logging to TensorBoard by default
+        self.log('train_loss', loss, on_epoch=True, on_step=False, logger=True)
+        self.log('train_acc', acc, on_epoch=True, on_step=False, logger=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y, mask = batch
+        y_hat = self.forward(x, mask)
+        y = y.type_as(y_hat)
+        loss = torch.nn.functional.binary_cross_entropy(y_hat, y)
+        # loss = torch.nn.functional.mse_loss(y_hat, y) + torch.nn.functional.l1_loss(y_hat, y)
+        y_hat = (y_hat > 0.5).float()
+        acc = (y_hat == y).sum()/x.shape[0]
+        # Logging to TensorBoard by default
+        self.log('val_loss', loss, on_epoch=True, on_step=False, logger=True)
+        self.log('val_acc', acc, on_epoch=True, on_step=False, logger=True)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        return optimizer
+
+
+class LitModelP(pl.LightningModule):
+
+    def __init__(self, img_size, frg_size, CONV_HEAD, NB_FRAG):
+        super().__init__()
+        self.vit = ViT(image_size=img_size,
+                       patch_size=frg_size,
+                       num_classes=NB_FRAG**2,
+                       dim=64,
+                       depth=6,
+                       heads=2,
+                       mlp_dim=128,
+                       conv_head=CONV_HEAD,
+                       dropout=0.,
+                       emb_dropout=0.)
+
+        self.example_input_array = torch.randn((1, 3, img_size, img_size))
+        self.learning_rate = 4e-5
+
+    def forward(self, x, mask=None):
+        # in lightning, forward defines the prediction/inference actions
+        if mask is not None:
+            mask = mask.bool()
+        out = self.vit(x, mask)
+        return out
+
+    def training_step(self, batch, batch_idx):
+        # training_step defined the train loop.
+        # It is independent of forward
+        x, y, mask = batch
+        y_hat = self.forward(x, mask)
+        loss = torch.nn.functional.cross_entropy(y_hat, y)
+        _, amax = torch.max(y_hat, 1)
+        acc = (amax == y).float().sum().item()/x.shape[0]
+        # Logging to TensorBoard by default
+        self.log('train_loss', loss, on_epoch=True, on_step=False, logger=True)
+        self.log('train_acc', acc, on_epoch=True, on_step=False, logger=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        # training_step defined the train loop.
+        # It is independent of forward
+        x, y, mask = batch
+        y_hat = self.forward(x, mask)
+        loss = torch.nn.functional.cross_entropy(y_hat, y)
+        _, amax = torch.max(y_hat, 1)
+        acc = (amax == y).float().sum().item()/x.shape[0]
+        # Logging to TensorBoard by default
+        self.log('val_loss', loss, on_epoch=True, on_step=False, logger=True)
+        self.log('val_acc', acc, on_epoch=True, on_step=False, logger=True)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        return optimizer
+
 
 class ModelP(nn.Module):
     def __init__(self, wrn, nb_out, img_size=6400, frg_size=1024):

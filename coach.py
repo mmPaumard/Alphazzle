@@ -42,6 +42,16 @@ class Coach():
         episodeStep = nb_help
         if verbose: print(current_puzzle)
 
+        import matplotlib.pyplot as plt
+        plt.figure(0)
+        for i in range(fragments_nb):
+            plt.subplot(3, 3, 1+i)
+            img = fragments[i]
+            img = (img - np.min(img)) / np.ptp(img)
+            plt.imshow(img)
+        plt.pause(1)
+
+
         while True:
             if verbose: print(f"New episode: fragment {episodeStep}/{fragments_nb}.")
             episodeStep += 1
@@ -57,6 +67,16 @@ class Coach():
                 action = np.random.choice(len(pi), p=pi)
             if verbose: print(f"pi:{pi} and action: {action}")
             current_puzzle = self.game.get_next_state(current_puzzle, action)
+
+            if not self.game.has_game_ended(current_puzzle):
+                nn_puzzle = self.game.pnet_input(current_puzzle, fragments)
+                img = nn_puzzle.cpu().numpy().squeeze()
+                img = img.transpose(1, 2, 0)
+                img = (img - np.min(img)) / np.ptp(img)
+                plt.figure(1)
+                plt.clf()
+                plt.imshow(img)
+                plt.pause(0.5)
 
             if self.game.has_game_ended(current_puzzle):
                 score_f = self.game.result_fragment(current_puzzle, solution_dict)

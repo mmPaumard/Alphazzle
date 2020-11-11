@@ -175,10 +175,10 @@ class Game():
 
     def pnet_input(self, current_fdict, fragments, verbose=False):
         """Returns the np array of the puzzle"""
-        fragments_nb = len(current_fdict)
+        fragments_nb = len(fragments)
         s = State(self.puzzle_size, self.fragment_size, fragments_nb, copy.deepcopy(current_fdict), space=self.space)
-        if verbose: print(s.remaining_fragments_idx, current_puzzle)
-        assert(s.get_remaining_fragments() != [])
+        if verbose: print(s.get_remaining_fragments(), current_fdict)
+        # assert(s.get_remaining_fragments() != [])
 
         nnet_fragment = s.get_next_fragment_img(fragments).transpose(2,0,1)
 
@@ -189,7 +189,7 @@ class Game():
         """Returns the np array of the puzzle"""
         fragments_nb = len(current_fdict)
         s = State(self.puzzle_size, self.fragment_size, fragments_nb, copy.deepcopy(current_fdict), space=self.space)
-        if verbose: print(s.remaining_fragments_idx, current_puzzle)
+        if verbose: print(s.get_puzzle_idx())
 
         nnet_puzzle = s.get_current_puzzle_img(fragments).transpose(2,0,1)
         nnet_puzzle = nnet_puzzle.reshape(1, 3, self.puzzle_size, self.puzzle_size)

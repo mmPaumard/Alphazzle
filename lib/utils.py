@@ -12,7 +12,7 @@ def softmax(x, temp=1):
 
 def sigmoid(x):
     """Computes sigmoid values for each sets of scores in x."""
-    return 1/(1 + np.exp(-x))
+    return 1./(1. + np.exp(-x))
 
 class Flatten(Module):
     def forward(self, input):

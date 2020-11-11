@@ -2,6 +2,8 @@ import torch
 import torch.nn.functional as F
 from einops import rearrange, repeat
 from torch import nn
+from torchvision.models import resnet18, vgg11
+from torchvision import transforms
 
 MIN_NUM_PATCHES = 3
 
@@ -52,13 +54,27 @@ class Attention(nn.Module):
 
         dots = torch.einsum('bhid,bhjd->bhij', q, k) * self.scale
 
+        if torch.isnan(q).any():
+            print('nan in q {}'.format(q))
+        if torch.isnan(k).any():
+            print('nan in k {}'.format(k))
+        if torch.isnan(v).any():
+            print('nan in v {}'.format(v))
+
+        if torch.isnan(dots).any():
+            print('nan in dots: {}'.format(dots))
+            print('mask: {}'.format(mask.float().flatten(1).sum(1)))
+
         if mask is not None:
             mask = F.pad(mask.flatten(1), (1, 0), value = True)
             assert mask.shape[-1] == dots.shape[-1], 'mask has incorrect dimensions'
             mask = mask[:, None, :] * mask[:, :, None]
-            dots.masked_fill_(~mask, float('-inf'))
+            mask = mask.unsqueeze(1).repeat((1, h, 1, 1))
+            # print(mask)
+            dots.masked_fill_(~mask, float(-100.0))
             del mask
 
+        # print('dots+mask {}'.format(dots))
         attn = dots.softmax(dim=-1)
 
         out = torch.einsum('bhij,bhjd->bhid', attn, v)
@@ -67,32 +83,62 @@ class Attention(nn.Module):
         return out
 
 
+# class ConvHead(nn.Module):
+#     def __init__(self, patch_size, dim):
+#         super().__init__()
+#         self.patch_size = patch_size
+#         self.conv1 = nn.Conv2d(3, 32, kernel_size=3, bias=False, padding=0)
+#         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, bias=True, padding=0)
+#         self.conv3 = nn.Conv2d(64, 64, kernel_size=3, bias=True, padding=0)
+#         self.bn1 = nn.BatchNorm2d(32, affine=False, track_running_stats=True)
+#         self.bn2 = nn.BatchNorm2d(64, affine=False, track_running_stats=True)
+#         self.bn3 = nn.BatchNorm2d(64, affine=False, track_running_stats=True)
+#         self.lin = nn.Linear(64*64, dim, bias=False)
+#         self.relu = nn.ReLU()
+#
+#     def forward(self, x):
+#         b, p, d = x.shape
+#         x = x.view(-1, 3, self.patch_size, self.patch_size)
+#         x = self.relu(self.bn1(self.conv1(x)))
+#         x = F.max_pool2d(x, kernel_size=2)
+#         x = self.relu(self.bn2(self.conv2(x)))
+#         x = F.max_pool2d(x, kernel_size=2)
+#         x = self.relu(self.bn3(self.conv3(x)))
+#         x = F.adaptive_avg_pool2d(x, 8)
+#         x = x.view(b, p, 64*64)
+#         x = self.lin(x)
+#         return x
+
 class ConvHead(nn.Module):
     def __init__(self, patch_size, dim):
         super().__init__()
+        # self.resnet = resnet18(pretrained=True)
+        # self.resnet.avgpool = nn.AdaptiveAvgPool2d(1)
+        # self.resnet.fc = nn.Identity()
+        # self.resnet.requires_grad = False
+        # self.resnet.train(False)
+        self.resnet = nn.Sequential(nn.AdaptiveAvgPool2d(32),
+                                    nn.Conv2d(3, 32, kernel_size=7),
+                                    nn.ReLU(),
+                                    nn.AdaptiveAvgPool2d(4),
+                                    nn.Flatten())
         self.patch_size = patch_size
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, bias=False, padding=0)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, bias=True, padding=0)
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, bias=True, padding=0)
-        self.bn1 = nn.BatchNorm2d(32, affine=False, track_running_stats=True)
-        self.bn2 = nn.BatchNorm2d(64, affine=False, track_running_stats=True)
-        self.bn3 = nn.BatchNorm2d(64, affine=False, track_running_stats=True)
-        self.lin = nn.Linear(64*64, dim, bias=False)
-        self.relu = nn.ReLU()
+        self.dim = dim
+        self.rdim = self.resnet(torch.randn(1, 3, patch_size, patch_size)).shape[1]
+        print('rdim: {}'.format(self.rdim))
+        self.lin = nn.Linear(self.rdim, self.dim)
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
 
     def forward(self, x):
         b, p, d = x.shape
         x = x.view(-1, 3, self.patch_size, self.patch_size)
-        x = self.relu(self.bn1(self.conv1(x)))
-        x = F.max_pool2d(x, kernel_size=2)
-        x = self.relu(self.bn2(self.conv2(x)))
-        x = F.max_pool2d(x, kernel_size=2)
-        x = self.relu(self.bn3(self.conv3(x)))
-        x = F.adaptive_avg_pool2d(x, 8)
-        x = x.view(b, p, 64*64)
+        x = self.normalize(x)
+        x = self.resnet(x)
+        x = x.view(b, p, self.rdim)
         x = self.lin(x)
+        # x = torch.nn.functional.normalize(x, dim=1)
         return x
-
 
 
 class Transformer(nn.Module):
@@ -137,7 +183,7 @@ class ViT(nn.Module):
             nn.Linear(dim, mlp_dim),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(mlp_dim, num_classes)
+            nn.Linear(mlp_dim, num_classes, bias=False)
         )
 
     def forward(self, img, mask = None):

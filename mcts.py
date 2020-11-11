@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import torch
 
 from lib.utils import sigmoid, softmax
 EPS = 1000 #1e-8
@@ -51,7 +52,8 @@ class MCTS():
         for i in range(self.args['numMCTSSims']):
             #print("--------------------new sim---------------------")
             self.search(current_puzzle, fragments, solution_dict)
-
+            print('\rsim {}/{}'.format(i, self.args['numMCTSSims']), end='')
+        print('')
         #print("done")
 
         s = self.game.string_representation(current_puzzle)
@@ -59,6 +61,8 @@ class MCTS():
             counts = [self.Qsa[(s,a)] if (s,a) in self.Qsa else 0 for a in range(self.game.action_size)]
         else:
             counts = [self.Nsa[(s,a)] if (s,a) in self.Nsa else 0 for a in range(self.game.action_size)]
+
+        print('counts: {}'.format(counts))
 
         if temp==0:
             bestA = np.argmax(counts)
@@ -102,13 +106,18 @@ class MCTS():
 
             if s not in self.Vt:
                 # nn_puzzle = self.game.full_puzzle_img(current_puzzle, fragments)
-                if self.args['disable_v1']==1:
-                    v = 1
-                elif self.args['disable_v1']==2: #ground truth, puzzle-wise
-                    v = self.game.result_reass(current_puzzle, solution_dict)
+                # if self.args['disable_v1']==1:
+                #     v = 1
+                if self.args['disable_v2']==1: #ground truth, puzzle-wise
+                    if verbose: print('using ground truth')
+                    v = self.game.result_fragment(current_puzzle, solution_dict)
                 else:
+                    if verbose: print('predicting v using nnet')
                     nn_puzzle = self.game.vnet_input(current_puzzle, fragments)
-                    v = sigmoid(self.nnet_v(nn_puzzle).detach().cpu().numpy()[0])
+                    # v = (self.nnet_v(nn_puzzle).detach().cpu().numpy()[0])
+                    v = self.nnet_v(nn_puzzle).detach().cpu().numpy()[0]
+                    v_gt = self.game.result_fragment(current_puzzle, solution_dict)
+                    print('   terminal node comparing gt: {:.3f} to pred {}'.format(v_gt, v), end='')
                 self.Vt[s] = v
                 if verbose: print(v)
             return self.Vt[s]
@@ -117,11 +126,22 @@ class MCTS():
         if s not in self.Ps:
             if verbose: print("leaf node, puzzle:", current_puzzle)
             nn_puzzle = self.game.pnet_input(current_puzzle, fragments)
+            # import matplotlib.pyplot as plt
+            # img = nn_puzzle.cpu().numpy().squeeze()
+            # img = img.transpose(1, 2, 0)
+            # img = (img - np.min(img)) / np.ptp(img)
+            # plt.clf()
+            # plt.imshow(img)
             if self.args['disable_p']:
                 self.Ps[s] = np.ones((self.args['position_nb']))
             else:
                 x1 = nn_puzzle
-                self.Ps[s] = softmax(self.nnet_p(x1).detach().cpu().numpy()[0])
+                nb_f = int(np.sqrt(self.game.action_size))
+                mask = (1-self.game.get_valid_moves(current_puzzle))
+                mask = mask.reshape(1, nb_f, nb_f)
+                mask = np.pad(mask, [(0,0), (1,0), (1,0)], mode='constant', constant_values=1.)
+                mask = torch.tensor(mask).bool().cuda()
+                self.Ps[s] = softmax(self.nnet_p(x1, mask).detach().cpu().numpy()[0])
             if verbose: print(self.Ps[s])
 
             valids = self.game.get_valid_moves(current_puzzle)
@@ -138,14 +158,24 @@ class MCTS():
             self.Vs[s] = valids
             self.Ns[s] = 0
 
-            if self.args['disable_v2']==1:
-                v = 1
-            elif self.args['disable_v2']==2: #ground truth, puzzle-wise
-                v = self.game.result_reass(current_puzzle, solution_dict)
+            if self.args['disable_v1']==1:
+                v = self.game.result_fragment(current_puzzle, solution_dict)
+            # elif self.args['disable_v2']==1: #ground truth, puzzle-wise
+            #     if verbose: print('using ground truth')
+            #     v = self.game.result_reass(current_puzzle, solution_dict)
             else:
                 nn_puzzle = self.game.vnet_input(current_puzzle, fragments)
-                v = sigmoid(self.nnet_v(nn_puzzle).detach().cpu().numpy()[0])
-            if verbose: print("V IS: ", v)
+                nb_f = int(np.sqrt(self.game.action_size))
+                mask = (1-self.game.get_valid_moves(current_puzzle))
+                mask = torch.tensor(mask.reshape(1, nb_f, nb_f)).bool().cuda()
+                # mask = None
+                v = self.nnet_v(nn_puzzle, mask).detach().cpu().numpy()[0]
+                v_gt = self.game.result_fragment(current_puzzle, solution_dict)
+                # print('   normal node comparing gt: {:0.3f} to pred {}'.format(v_gt, v), end='')
+                # print("V IS: ", v)
+
+            # plt.title('V : {}'.format(v))
+            # plt.pause(0.1)
             return v
 
         #print('explored node')
