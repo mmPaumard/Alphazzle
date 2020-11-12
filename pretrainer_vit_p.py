@@ -22,10 +22,9 @@ def main():
 
     x,_, _ = dataset_train_p[0]
     img_size = x.shape[2]
-    frg_size = FRAG_SIZE+SPACE_SIZE
 
     ### Prepare neural network P ####
-    model_p = LitModelP(img_size, frg_size, CONV_HEAD, NB_FRAG)
+    model_p = LitModelP(img_size, FRAG_SIZE, SPACE_SIZE, CONV_HEAD, NB_FRAG)
 
     train = torch.utils.data.DataLoader(dataset_train_p, batch_size=64, num_workers=6)
     val = torch.utils.data.DataLoader(dataset_valid_p, batch_size=64, num_workers=6)

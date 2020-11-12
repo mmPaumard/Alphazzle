@@ -22,13 +22,12 @@ def main():
 
     x,_, _ = dataset_train_p[0]
     img_size = x.shape[2]
-    frg_size = FRAG_SIZE+SPACE_SIZE
 
     if LOAD_WEIGHT:
-        model_v = LitModelV.load_from_checkpoint(LOAD_WEIGHT, img_size=img_size, frg_size=frg_size, CONV_HEAD=CONV_HEAD)
+        model_v = LitModelV.load_from_checkpoint(LOAD_WEIGHT, img_size=img_size, patch_size=FRAG_SIZE, space_size=SPACE_SIZE, CONV_HEAD=CONV_HEAD)
         print('v weights loaded from {}'.format(LOAD_WEIGHT))
     else:
-        model_v = LitModelV(img_size, frg_size, CONV_HEAD)
+        model_v = LitModelV(img_size, FRAG_SIZE, SPACE_SIZE, CONV_HEAD)
 
     train = torch.utils.data.DataLoader(dataset_train_p, batch_size=64, num_workers=6)
     val = torch.utils.data.DataLoader(dataset_valid_p, batch_size=64, num_workers=6)

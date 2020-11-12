@@ -110,29 +110,38 @@ class Attention(nn.Module):
 #         return x
 
 class ConvHead(nn.Module):
-    def __init__(self, patch_size, dim):
+    def __init__(self, patch_size, space_size, dim):
         super().__init__()
         # self.resnet = resnet18(pretrained=True)
         # self.resnet.avgpool = nn.AdaptiveAvgPool2d(1)
         # self.resnet.fc = nn.Identity()
         # self.resnet.requires_grad = False
         # self.resnet.train(False)
-        self.resnet = nn.Sequential(nn.AdaptiveAvgPool2d(32),
-                                    nn.Conv2d(3, 32, kernel_size=7),
+        self.resnet = nn.Sequential(nn.AdaptiveAvgPool2d(64),
+                                    nn.Conv2d(3, 32, kernel_size=3),
                                     nn.ReLU(),
-                                    nn.AdaptiveAvgPool2d(4),
+                                    nn.Conv2d(32, 32, kernel_size=3),
+                                    nn.ReLU(),
+                                    nn.MaxPool2d(2),
+                                    nn.Conv2d(32, 64, kernel_size=3),
+                                    nn.ReLU(),
+                                    nn.MaxPool2d(2),
+                                    nn.Conv2d(64, 128, kernel_size=3),
+                                    nn.ReLU(),
+                                    nn.AdaptiveAvgPool2d(2),
                                     nn.Flatten())
         self.patch_size = patch_size
+        self.space_size = space_size
         self.dim = dim
-        self.rdim = self.resnet(torch.randn(1, 3, patch_size, patch_size)).shape[1]
+        self.rdim = 512 #self.resnet(torch.randn(1, 3, patch_size, patch_size)).shape[1]
         print('rdim: {}'.format(self.rdim))
         self.lin = nn.Linear(self.rdim, self.dim)
-        self.normalize = nn.Sequential(transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225]))
+        self.normalize = nn.Sequential(transforms.CenterCrop((self.patch_size, self.patch_size)),
+                                       transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
 
     def forward(self, x):
         b, p, d = x.shape
-        x = x.view(-1, 3, self.patch_size, self.patch_size)
+        x = x.view(-1, 3, self.patch_size+self.space_size, self.patch_size+self.space_size)
         x = self.normalize(x)
         x = self.resnet(x)
         x = x.view(b, p, self.rdim)
@@ -157,18 +166,19 @@ class Transformer(nn.Module):
         return x
 
 class ViT(nn.Module):
-    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, channels = 3, dropout = 0., emb_dropout = 0., conv_head = False):
+    def __init__(self, *, image_size, patch_size, space_size, num_classes, dim, depth, heads, mlp_dim, channels = 3, dropout = 0., emb_dropout = 0., conv_head = False):
         super().__init__()
-        assert image_size % patch_size == 0, 'image dimensions must be divisible by the patch size'
-        num_patches = (image_size // patch_size) ** 2
-        patch_dim = channels * patch_size ** 2
+        assert image_size % (patch_size+space_size) == 0, 'image dimensions must be divisible by the patch size'
+        num_patches = (image_size // (patch_size+space_size)) ** 2
+        patch_dim = channels * (patch_size+space_size) ** 2
         assert num_patches > MIN_NUM_PATCHES, f'your number of patches ({num_patches}, {MIN_NUM_PATCHES}) is way too small for attention to be effective. try decreasing your patch size'
 
         self.patch_size = patch_size
+        self.space_size = space_size
 
         self.pos_embedding = nn.Parameter(torch.randn(1, num_patches + 1, dim))
         if conv_head:
-            self.patch_to_embedding = ConvHead(patch_size, dim)
+            self.patch_to_embedding = ConvHead(patch_size, space_size, dim)
         else:
             self.patch_to_embedding = nn.Linear(patch_dim, dim)
         self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
@@ -187,7 +197,7 @@ class ViT(nn.Module):
         )
 
     def forward(self, img, mask = None):
-        p = self.patch_size
+        p = self.patch_size+self.space_size
 
         x = rearrange(img, 'b c (h p1) (w p2) -> b (h w) (p1 p2 c)', p1 = p, p2 = p)
         x = self.patch_to_embedding(x)

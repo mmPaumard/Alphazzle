@@ -19,18 +19,19 @@ from torchvision import transforms
 # lightning wrapper
 class LitModelV(pl.LightningModule):
 
-    def __init__(self, img_size, frg_size, CONV_HEAD):
+    def __init__(self, img_size, patch_size, space_size, CONV_HEAD):
         super().__init__()
         self.vit = ViT(image_size=img_size,
-                       patch_size=frg_size,
+                       patch_size=patch_size,
+                       space_size=space_size,
                        num_classes=1,
-                       dim=64,
-                       depth=6,
-                       heads=2,
-                       mlp_dim=128,
+                       dim=128,
+                       depth=4,
+                       heads=4,
+                       mlp_dim=256,
                        conv_head=CONV_HEAD,
-                       dropout=0.,
-                       emb_dropout=0.)
+                       dropout=0.1,
+                       emb_dropout=0.1)
         # self.vit = resnet18(pretrained=True)
         # self.vit.train(False)
         # self.vit.requires_grad = False
@@ -92,18 +93,19 @@ class LitModelV(pl.LightningModule):
 
 class LitModelP(pl.LightningModule):
 
-    def __init__(self, img_size, frg_size, CONV_HEAD, NB_FRAG):
+    def __init__(self, img_size, frg_size, space_size, CONV_HEAD, NB_FRAG):
         super().__init__()
         self.vit = ViT(image_size=img_size,
                        patch_size=frg_size,
+                       space_size=space_size,
                        num_classes=NB_FRAG**2,
-                       dim=64,
-                       depth=6,
-                       heads=2,
-                       mlp_dim=128,
+                       dim=128,
+                       depth=4,
+                       heads=4,
+                       mlp_dim=256,
                        conv_head=CONV_HEAD,
-                       dropout=0.,
-                       emb_dropout=0.)
+                       dropout=0.1,
+                       emb_dropout=0.1)
 
         self.example_input_array = torch.randn((1, 3, img_size, img_size))
         self.learning_rate = 4e-5

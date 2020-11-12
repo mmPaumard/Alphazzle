@@ -45,11 +45,11 @@ class Coach():
         import matplotlib.pyplot as plt
         plt.figure(0)
         for i in range(fragments_nb):
-            plt.subplot(3, 3, 1+i)
+            plt.subplot(int(np.sqrt(fragments_nb)), int(np.sqrt(fragments_nb)), 1+i)
             img = fragments[i]
             img = (img - np.min(img)) / np.ptp(img)
             plt.imshow(img)
-        plt.pause(1)
+        plt.pause(0.1)
 
 
         while True:

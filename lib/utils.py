@@ -4,7 +4,7 @@ from torch.nn import Module
 # from poutyne.framework.callbacks import Callback
 
 
-def softmax(x, temp=1):
+def softmax(x, temp=10):
     """Computes softmax values for each sets of scores in x."""
     #e_x = np.exp(x - np.max(x))
     e_x = np.exp(temp*x)

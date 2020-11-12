@@ -111,13 +111,14 @@ class MCTS():
                 if self.args['disable_v2']==1: #ground truth, puzzle-wise
                     if verbose: print('using ground truth')
                     v = self.game.result_fragment(current_puzzle, solution_dict)
+                    print('   terminal node comparing gt: {:.3f}'.format(v), end='')
                 else:
                     if verbose: print('predicting v using nnet')
                     nn_puzzle = self.game.vnet_input(current_puzzle, fragments)
                     # v = (self.nnet_v(nn_puzzle).detach().cpu().numpy()[0])
                     v = self.nnet_v(nn_puzzle).detach().cpu().numpy()[0]
                     v_gt = self.game.result_fragment(current_puzzle, solution_dict)
-                    print('   terminal node comparing gt: {:.3f} to pred {}'.format(v_gt, v), end='')
+                    print('        terminal node comparing gt: {:.3f} to pred {}'.format(v_gt, v), end='')
                 self.Vt[s] = v
                 if verbose: print(v)
             return self.Vt[s]
@@ -155,14 +156,18 @@ class MCTS():
                 self.Ps[s] = self.Ps[s] + valids
                 self.Ps[s] /= np.sum(self.Ps[s])
 
+            # P_str = '['
+            # for pi in self.Ps[s]: P_str += ' {:.2f}'.format(pi)
+            # P_str += ']'
+            # print('   policy P: {}'.format(P_str), end='')
+
             self.Vs[s] = valids
             self.Ns[s] = 0
 
             if self.args['disable_v1']==1:
                 v = self.game.result_fragment(current_puzzle, solution_dict)
             # elif self.args['disable_v2']==1: #ground truth, puzzle-wise
-            #     if verbose: print('using ground truth')
-            #     v = self.game.result_reass(current_puzzle, solution_dict)
+                print('   normal node comparing gt: {:0.3f}'.format(v), end='')
             else:
                 nn_puzzle = self.game.vnet_input(current_puzzle, fragments)
                 nb_f = int(np.sqrt(self.game.action_size))

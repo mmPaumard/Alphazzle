@@ -28,10 +28,10 @@ def resize_image(image, min_size, da=False):
     height = image.height
     width = image.width
 
-    # if da:
-    #     height = int(height*(1+0.2*np.random.randn()))
-    #     width = int(width*(1+0.2*np.random.randn()))
-    #     image = image.resize(size=(width, height))
+    if da:
+        height = int(height*(1+0.1*np.random.randn()))
+        width = int(width*(1+0.1*np.random.randn()))
+        image = image.resize(size=(width, height))
     
     if ((height != min_size and width != min_size) or
         (height == min_size and width < min_size) or
