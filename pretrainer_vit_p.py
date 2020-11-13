@@ -10,10 +10,10 @@ import pytorch_lightning as pl
 def main():
     print("loading datasets")
     ##### Prepare data for P ########
-    dataset_train_p = prepare_data_p(path=DATASET_PATH, phase="train", puzzle_size=PUZZLE_SIZE, fragment_per_side=NB_FRAG,
+    dataset_train_p = prepare_data_p(path=DATASET_PATH, phase="train", fragment_per_side=NB_FRAG,
                                      fragment_size=FRAG_SIZE, space=SPACE_SIZE, nb_helpers=NB_HELP, central_known=CENTRAL_FRAGMENT,
                                      batch_size=1, data_aug=AUGMENT)
-    dataset_valid_p = prepare_data_p(path=DATASET_PATH, phase="val", puzzle_size=PUZZLE_SIZE, fragment_per_side=NB_FRAG,
+    dataset_valid_p = prepare_data_p(path=DATASET_PATH, phase="val", fragment_per_side=NB_FRAG,
                                      fragment_size=FRAG_SIZE, space=SPACE_SIZE, nb_helpers=NB_HELP, central_known=CENTRAL_FRAGMENT,
                                      batch_size=1)
     print("p dataset has been loaded")

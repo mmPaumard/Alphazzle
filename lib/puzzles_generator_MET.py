@@ -204,7 +204,7 @@ class prepare_data_p():
 
         mask = mask.reshape((self.batch_size, self.fragment_per_side, self.fragment_per_side))
         mask = np.pad(mask, [(0,0), (1,0), (1,0)], mode='constant', constant_values=1.)
-        return puzzles.transpose(0, 3, 1, 2).squeeze(), solutions, mask
+        return puzzles.transpose(0, 3, 1, 2).squeeze(), solutions.squeeze(), mask
 
         # sp = self.space//2
         # f_coord = [np.s_[self.fragment_size*i+self.space*(i)+sp:
