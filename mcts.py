@@ -24,6 +24,9 @@ class MCTS():
         self.Vs = {}        # stores game.get_valid_moves for board s
         self.Vt = {}        # stores v for terminal
 
+        self.acc = 0
+        self.n_acc = 0
+
     def print_state(self):
         print("QSA", self.Qsa)
         print("NSA", self.Nsa)
@@ -110,15 +113,20 @@ class MCTS():
                 #     v = 1
                 if self.args['disable_v2']==1: #ground truth, puzzle-wise
                     if verbose: print('using ground truth')
-                    v = self.game.result_fragment(current_puzzle, solution_dict)
-                    print('   terminal node comparing gt: {:.3f}'.format(v), end='')
+                    v = self.game.result_reass(current_puzzle, solution_dict) + 0.1*np.random.randn()
+                    print('   terminal node using gt: {:.3f}'.format(v), end='\n')
                 else:
                     if verbose: print('predicting v using nnet')
                     nn_puzzle = self.game.vnet_input(current_puzzle, fragments)
                     # v = (self.nnet_v(nn_puzzle).detach().cpu().numpy()[0])
-                    v = self.nnet_v(nn_puzzle).detach().cpu().numpy()[0]
+                    nb_f = int(np.sqrt(self.game.action_size))
+                    mask = (1-self.game.get_valid_moves(current_puzzle))
+                    mask = mask.reshape(1, nb_f, nb_f)
+                    mask = np.pad(mask, [(0,0), (1,0), (1,0)], mode='constant', constant_values=1.)
+                    mask = torch.tensor(mask).bool().cuda()
+                    v = self.nnet_v(nn_puzzle, mask).detach().cpu().numpy()[0].item()
                     v_gt = self.game.result_fragment(current_puzzle, solution_dict)
-                    print('        terminal node comparing gt: {:.3f} to pred {}'.format(v_gt, v), end='')
+                    print('        terminal node comparing gt: {:.3f} to pred {}'.format(v_gt, v), end='\n')
                 self.Vt[s] = v
                 if verbose: print(v)
             return self.Vt[s]
@@ -142,7 +150,12 @@ class MCTS():
                 mask = mask.reshape(1, nb_f, nb_f)
                 mask = np.pad(mask, [(0,0), (1,0), (1,0)], mode='constant', constant_values=1.)
                 mask = torch.tensor(mask).bool().cuda()
-                self.Ps[s] = softmax(self.nnet_p(x1, mask).detach().cpu().numpy()[0])
+                self.Ps[s] = softmax(self.nnet_p(x1, mask).detach().cpu().numpy()[0]).squeeze()
+                pi_max = np.argmax(self.Ps[s])
+                pi_gt = self.game.get_next_fragment_idx(current_puzzle)
+                to_place = sum(self.game.get_valid_moves(current_puzzle))
+                step = self.game.action_size - to_place
+                print('   doing P with pred {:.3f} for {} compared to gt {} with pred {:.3f} at step {}'.format(self.Ps[s][pi_max], pi_max, pi_gt, self.Ps[s][pi_gt], step))
             if verbose: print(self.Ps[s])
 
             valids = self.game.get_valid_moves(current_puzzle)
@@ -165,18 +178,29 @@ class MCTS():
             self.Ns[s] = 0
 
             if self.args['disable_v1']==1:
-                v = self.game.result_fragment(current_puzzle, solution_dict)
+                v = self.game.result_fragment(current_puzzle, solution_dict) #+ 0.1*np.random.randn()
             # elif self.args['disable_v2']==1: #ground truth, puzzle-wise
-                print('   normal node comparing gt: {:0.3f}'.format(v), end='')
+                print('   normal node using gt: {:0.3f}'.format(v), end='\n')
             else:
                 nn_puzzle = self.game.vnet_input(current_puzzle, fragments)
+                to_place = sum(self.game.get_valid_moves(current_puzzle))
+                step = self.game.action_size - to_place
+                # if to_place/nb_f < 0.8:
                 nb_f = int(np.sqrt(self.game.action_size))
                 mask = (1-self.game.get_valid_moves(current_puzzle))
-                mask = torch.tensor(mask.reshape(1, nb_f, nb_f)).bool().cuda()
-                # mask = None
-                v = self.nnet_v(nn_puzzle, mask).detach().cpu().numpy()[0]
+                mask = mask.reshape(1, nb_f, nb_f)
+                mask = np.pad(mask, [(0,0), (1,0), (1,0)], mode='constant', constant_values=1.)
+                mask = torch.tensor(mask).bool().cuda()
+                v = self.nnet_v(nn_puzzle, mask).detach().cpu().numpy()[0].item()
+                self.acc += v>0.5 == self.game.result_reass(current_puzzle, solution_dict)
+                self.n_acc += 1.
+                v *= step/self.game.action_size
+                # if v < 0.6:
+                #     v = 0.01
+                # else:
+                #     v = 0.01
                 v_gt = self.game.result_fragment(current_puzzle, solution_dict)
-                # print('   normal node comparing gt: {:0.3f} to pred {}'.format(v_gt, v), end='')
+                print('   normal node comparing gt: {:0.3f} to pred {} at step {}/{} acc = {}'.format(v_gt, v, step, self.game.action_size, self.acc/self.n_acc), end='\n')
                 # print("V IS: ", v)
 
             # plt.title('V : {}'.format(v))
@@ -208,6 +232,8 @@ class MCTS():
 
         if (s,a) in self.Qsa:
             self.Qsa[(s,a)] = (self.Nsa[(s,a)]*self.Qsa[(s,a)] + v)/(self.Nsa[(s,a)]+1)
+            # if v > self.Qsa[(s,a)]:
+            #     self.Qsa[(s,a)] = v
             self.Nsa[(s,a)] += 1
 
         else:

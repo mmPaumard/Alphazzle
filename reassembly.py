@@ -50,22 +50,22 @@ def prepare_nnets(args, VERBOSE=False):
     # lightning wrapper
 
     if args['p_weight_path']:
-        model_p = LitModelP.load_from_checkpoint(args['p_weight_path'], img_size=img_size, frg_size=frg_size, CONV_HEAD=CONV_HEAD, NB_FRAG=NB_FRAG)
+        model_p = LitModelP.load_from_checkpoint(args['p_weight_path'], img_size=img_size, frg_size=FRAG_SIZE, space_size=SPACE_SIZE, CONV_HEAD=CONV_HEAD, NB_FRAG=NB_FRAG)
         print('p weights loaded from {}'.format(args['p_weight_path']))
     else:
-        model_p = LitModelP(img_size, frg_size, CONV_HEAD, NB_FRAG)
+        model_p = LitModelP(img_size, FRAG_SIZE, SPACE_SIZE, CONV_HEAD, NB_FRAG)
 
     ## V
-
-    img_size = (NB_FRAG)*(FRAG_SIZE+SPACE_SIZE)
+    #
+    # img_size = (NB_FRAG)*(FRAG_SIZE+SPACE_SIZE)
 
     # lightning wrapper
 
     if args['v_weight_path']:
-        model_v = LitModelV.load_from_checkpoint(args['v_weight_path'], img_size=img_size, frg_size=frg_size, CONV_HEAD=CONV_HEAD)
+        model_v = LitModelV.load_from_checkpoint(args['v_weight_path'], img_size=img_size, patch_size=FRAG_SIZE, space_size=SPACE_SIZE, CONV_HEAD=CONV_HEAD)
         print('v weights loaded from {}'.format(args['v_weight_path']))
     else:
-        model_v = LitModelV(img_size, frg_size, CONV_HEAD)
+        model_v = LitModelV(img_size, FRAG_SIZE, SPACE_SIZE, CONV_HEAD)
 
 
     if VERBOSE: print("weights loaded")
@@ -73,47 +73,47 @@ def prepare_nnets(args, VERBOSE=False):
 
 ################################################################################
 
-def prepare_problem(args, g, current_img_index, phase="val", middle=False):
-    """For a puzzle, returns the fragments and the solution.
-
-    Parameters:
-        args(dict):             the current setting
-        g:                      the game
-        current_img_index(int): the puzzle index
-        phase(str):             the dataset we use
-        middle(bool):           True if we place the middle fragment first
-
-    Returns:
-        np.array:       the shuffled array of fragments
-        dict:           the dictionnary of solutions
-    """
-    fragments = prepare_fragments(path=args['dir_global'], phase=phase,
-                                  puzzle_size=args['puzzle_size'], fragment_per_side=args['fragment_per_side'],
-                                  fragment_size=args['fragment_size'], space=args['space_size'])[current_img_index]
-    fragments_idx = list(range(len(fragments)))
-
-    if middle:
-        fragment_middle = np.array(fragments[4])
-        fragments_0 = fragments[:4]
-        fragments_1 = fragments[5:]
-        fragments = np.concatenate((fragments_0, fragments_1))
-        fragments_idx = list(range(len(fragments)+1))
-        fragments_idx.pop(4)
-
-    shuffled = list(zip(fragments, fragments_idx))
-    random.shuffle(shuffled)
-    fragments, fragments_idx = zip(*shuffled)
-    fragments = np.array(fragments)
-
-    if middle:
-        fragments = np.concatenate(([fragment_middle], list(fragments)))
-        fragments_idx = [4].extend(fragments_idx)
-
-    solution_dict = g.get_init_puzzle(args['fragments_nb'])
-    for i in range(len(solution_dict)):
-        solution_dict[i]['position'] = fragments_idx[i]
-
-    return fragments, solution_dict
+# def prepare_problem(args, g, current_img_index, phase="val", middle=False):
+#     """For a puzzle, returns the fragments and the solution.
+#
+#     Parameters:
+#         args(dict):             the current setting
+#         g:                      the game
+#         current_img_index(int): the puzzle index
+#         phase(str):             the dataset we use
+#         middle(bool):           True if we place the middle fragment first
+#
+#     Returns:
+#         np.array:       the shuffled array of fragments
+#         dict:           the dictionnary of solutions
+#     """
+#     fragments = prepare_fragments(path=args['dir_global'], phase=phase,
+#                                   puzzle_size=args['puzzle_size'], fragment_per_side=args['fragment_per_side'],
+#                                   fragment_size=args['fragment_size'], space=args['space_size'])[current_img_index]
+#     fragments_idx = list(range(len(fragments)))
+#
+#     if middle:
+#         fragment_middle = np.array(fragments[4])
+#         fragments_0 = fragments[:4]
+#         fragments_1 = fragments[5:]
+#         fragments = np.concatenate((fragments_0, fragments_1))
+#         fragments_idx = list(range(len(fragments)+1))
+#         fragments_idx.pop(4)
+#
+#     shuffled = list(zip(fragments, fragments_idx))
+#     random.shuffle(shuffled)
+#     fragments, fragments_idx = zip(*shuffled)
+#     fragments = np.array(fragments)
+#
+#     if middle:
+#         fragments = np.concatenate(([fragment_middle], list(fragments)))
+#         fragments_idx = [4].extend(fragments_idx)
+#
+#     solution_dict = g.get_init_puzzle(args['fragments_nb'])
+#     for i in range(len(solution_dict)):
+#         solution_dict[i]['position'] = fragments_idx[i]
+#
+#     return fragments, solution_dict
 
 ################################################################################
 
@@ -141,6 +141,10 @@ def make_reassemblies(args, model_p, model_v, nb_img=None):
 
     print(f"Each score presents the result for the best, first and worst predicted V, for {args['orders']} random orders of fragments seen")
 
+    fragments_loader = prepare_fragments(path=args['dir_global'], phase='val',
+                                  puzzle_size=args['puzzle_size'], fragment_per_side=args['fragment_per_side'],
+                                  fragment_size=args['fragment_size'], space=args['space_size'])
+
     for current_img_id in range(nb_img):
         predicted_vs = [0.0]*args['orders']
         scores_reas = [0.0]*args['orders']
@@ -152,8 +156,7 @@ def make_reassemblies(args, model_p, model_v, nb_img=None):
                      args['fragments_nb'], space=args['space_size'])
             c = Coach(g, model_p, model_v, args)
 
-            fragments, solution_dict = prepare_problem(args, g, current_img_id,
-                                                       middle=args['central_frag'])
+            fragments, solution_dict = fragments_loader.prepare_problem(current_img_id)
             scores = c.executeEpisode(fragments, solution_dict,
                                       nb_help=args['numHelp'],
                                       inference_mode=args['inference'],

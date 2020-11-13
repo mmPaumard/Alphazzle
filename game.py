@@ -135,6 +135,12 @@ class Game():
         return s.is_the_game_over()
 
 
+    def get_next_fragment_idx(self, current_dict):
+        fragments_nb = len(current_dict)
+        s = State(self.puzzle_size, self.fragment_size, fragments_nb, copy.deepcopy(current_dict))
+        return s.get_next_fragment_idx()
+
+
     def result_fragment(self, current_fdict, solution_dict):
         """Compute the score of the completed puzzle, fragment-wise.
 
@@ -156,6 +162,13 @@ class Game():
         fragments_nb = len(current_fdict)
         s = State(self.puzzle_size, self.fragment_size, fragments_nb, copy.deepcopy(current_fdict))
         return s.score_reass(solution_dict)
+
+
+    def result_incomplete_reass(self, current_fdict, solution_dict):
+        """Compute the score of the completed puzzle."""
+        fragments_nb = len(current_fdict)
+        s = State(self.puzzle_size, self.fragment_size, fragments_nb, copy.deepcopy(current_fdict))
+        return s.score_incomplete_reass(solution_dict)
 
 
     def result_neighbors(self, current_fdict, solution_dict):
@@ -187,14 +200,15 @@ class Game():
 
     def vnet_input(self, current_fdict, fragments, verbose=False):
         """Returns the np array of the puzzle"""
-        fragments_nb = len(current_fdict)
-        s = State(self.puzzle_size, self.fragment_size, fragments_nb, copy.deepcopy(current_fdict), space=self.space)
-        if verbose: print(s.get_puzzle_idx())
-
-        nnet_puzzle = s.get_current_puzzle_img(fragments).transpose(2,0,1)
-        nnet_puzzle = nnet_puzzle.reshape(1, 3, self.puzzle_size, self.puzzle_size)
-
-        return torch.tensor(nnet_puzzle).cuda()
+        return self.pnet_input(current_fdict, fragments, verbose)
+        # fragments_nb = len(current_fdict)
+        # s = State(self.puzzle_size, self.fragment_size, fragments_nb, copy.deepcopy(current_fdict), space=self.space)
+        # if verbose: print(s.get_puzzle_idx())
+        #
+        # nnet_puzzle = s.get_current_puzzle_img(fragments).transpose(2,0,1)
+        # nnet_puzzle = nnet_puzzle.reshape(1, 3, self.puzzle_size, self.puzzle_size)
+        #
+        # return torch.tensor(nnet_puzzle).cuda()
 
 
     def full_puzzle_img(self, current_fdict, fragments):

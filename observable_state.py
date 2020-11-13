@@ -90,6 +90,11 @@ class State():
         """Returns the global score of the current puzzle"""
         return int(self.fragments_dict == solution_dict)
 
+    def score_incomplete_reass(self, solution_dict):
+        res = sum(i == j if (i['position']!=-1) else 0 for i, j in zip(self.fragments_dict, solution_dict))
+        size = sum(1 if i['position'] !=-1 else 0 for i in self.fragments_dict)
+        # print('res: {}/{}'.format(res, size))
+        return float(res==size)
 
     def get_neig_positions(self):
         neig_positions = {}
@@ -132,10 +137,17 @@ class State():
         img = self.get_current_puzzle_img(fragments)
         out = np.zeros((f+s+p, f+s+p, 3), dtype=np.float32)
         out[f+s:f+s+p, f+s:f+s+p, :] = img
-        frag = fragments[self.get_next_fragment_idx(), ...].squeeze()
-        for i in range(self.nb_per_side+1):
-            out[s//2+i*(f+s):s//2+i*(f+s)+f, s//2:s//2+f, :] = frag
-            out[ s//2:s//2+f,s//2+i*(f+s):s//2+i*(f+s)+f, :] = frag
+        idx = self.get_next_fragment_idx()
+        if idx is not None:
+            frag = fragments[self.get_next_fragment_idx(), ...].squeeze()
+            out[s//2:s//2+f, s//2:s//2+f, :] = frag
+            if verbose: print('fragment idx {}'.format(idx))
+            for i in range(1, min(self.nb_per_side+1, self.nb_positions-idx)):
+                if verbose: print('adding v fragment {}'.format(i))
+                out[s//2+i*(f+s):s//2+i*(f+s)+f, s//2:s//2+f, :] = fragments[idx+i]
+            for i in range(1, min(self.nb_per_side+1, self.nb_positions-idx-self.nb_per_side)):
+                if verbose: print('adding h fragment {}'.format(i))
+                out[ s//2:s//2+f,s//2+i*(f+s):s//2+i*(f+s)+f, :] = fragments[idx+self.nb_per_side+i]
         return out
 
     def get_current_puzzle_img(self, fragments):

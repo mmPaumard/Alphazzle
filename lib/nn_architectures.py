@@ -25,13 +25,13 @@ class LitModelV(pl.LightningModule):
                        patch_size=patch_size,
                        space_size=space_size,
                        num_classes=1,
-                       dim=128,
+                       dim=512,
                        depth=4,
-                       heads=4,
-                       mlp_dim=256,
+                       heads=8,
+                       mlp_dim=1024,
                        conv_head=CONV_HEAD,
-                       dropout=0.1,
-                       emb_dropout=0.1)
+                       dropout=0.,
+                       emb_dropout=0.0)
         # self.vit = resnet18(pretrained=True)
         # self.vit.train(False)
         # self.vit.requires_grad = False
@@ -44,7 +44,7 @@ class LitModelV(pl.LightningModule):
         #                          std=[0.229, 0.224, 0.225])
 
         self.example_input_array = torch.randn((1, 3, img_size, img_size))
-        self.learning_rate = 4e-5
+        self.learning_rate = 3e-5
 
     def forward(self, x, mask=None):
         # in lightning, forward defines the prediction/inference actions
@@ -99,16 +99,16 @@ class LitModelP(pl.LightningModule):
                        patch_size=frg_size,
                        space_size=space_size,
                        num_classes=NB_FRAG**2,
-                       dim=128,
+                       dim=512,
                        depth=4,
-                       heads=4,
-                       mlp_dim=256,
+                       heads=8,
+                       mlp_dim=1024,
                        conv_head=CONV_HEAD,
-                       dropout=0.1,
-                       emb_dropout=0.1)
+                       dropout=0.,
+                       emb_dropout=0.)
 
         self.example_input_array = torch.randn((1, 3, img_size, img_size))
-        self.learning_rate = 4e-5
+        self.learning_rate = 3e-5
 
     def forward(self, x, mask=None):
         # in lightning, forward defines the prediction/inference actions
