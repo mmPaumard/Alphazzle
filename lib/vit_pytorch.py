@@ -117,7 +117,7 @@ class ConvHead(nn.Module):
         # self.resnet.fc = nn.Identity()
         # self.resnet.requires_grad = False
         # self.resnet.train(False)
-        self.resnet = nn.Sequential(nn.AdaptiveAvgPool2d(64),
+        self.resnet = nn.Sequential(nn.AdaptiveAvgPool2d(48),
                                     nn.Conv2d(3, 32, kernel_size=3),
                                     nn.ReLU(),
                                     nn.Conv2d(32, 32, kernel_size=3),

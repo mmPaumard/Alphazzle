@@ -29,8 +29,8 @@ def resize_image(image, min_size, da=False):
     width = image.width
 
     if da:
-        height = int(height*(1+0.1*np.random.randn()))
-        width = int(width*(1+0.1*np.random.randn()))
+        height = int(height*(1+0.15*np.random.randn()))
+        width = int(width*(1+0.15*np.random.randn()))
         image = image.resize(size=(width, height))
     
     if ((height != min_size and width != min_size) or
@@ -82,7 +82,7 @@ def trans(image):
 
 def color(image):
     if np.random.rand() > 0.5:
-        rgb = [[1.+np.random.randn(3)*0.1]]
+        rgb = [[1.+np.random.randn(3)*0.15]]
         image *= rgb
     return image
 

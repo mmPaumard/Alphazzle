@@ -49,12 +49,12 @@ class prepare_data_v():
 
     def __getitem__(self, i):
         puzzles = np.zeros((self.batch_size, self.puzzle_size, self.puzzle_size, 3), dtype=np.float32)
-        solutions = np.zeros((self.batch_size), dtype=int)
+        solutions = np.zeros((self.batch_size), dtype=float)
         mask = np.zeros(((self.batch_size, self.fragment_per_side**2)))
 
         for j in range(self.batch_size):
-            # nb_placed_fragment = np.random.randint(self.nb_helpers, self.fragment_per_side**2)
-            nb_placed_fragment = min(self.fragment_per_side**2, self.nb_helpers + np.random.geometric(0.5))
+            nb_placed_fragment = np.random.randint(self.nb_helpers, self.fragment_per_side**2)
+            # nb_placed_fragment = min(self.fragment_per_side**2, self.nb_helpers + np.random.geometric(1./(self.fragment_per_side**2)))
             # print('nb placed {}'.format(nb_placed_fragment))
             fragments, solution_dict = self.fragments_loader.prepare_problem(i * self.batch_size + j)
             # print('sol dict {}'.format(solution_dict))
@@ -64,7 +64,7 @@ class prepare_data_v():
             # print('current dict {}'.format(current_dict))
 
             # gen incorrect
-            incorrect = np.random.rand() > 0.5
+            incorrect = np.random.rand() > 1./(self.fragment_per_side)
             if incorrect:
                 r = np.arange(0, self.fragment_per_side**2)
                 np.random.shuffle(r)
@@ -74,7 +74,10 @@ class prepare_data_v():
             s = State(self.fragment_per_side*(self.fragment_size+self.space), self.fragment_size, self.fragment_per_side**2, copy.deepcopy(current_dict),
                       space=self.space)
             puzzles[j, :, :, :] = s.get_next_fragment_img(fragments)
-            solutions[j] = 1 - incorrect
+            if incorrect:
+                solutions[j] = 0
+            else:
+                solutions[j] = 0.5 + 0.5*nb_placed_fragment/self.fragment_per_side**2
             for k in range(nb_placed_fragment):
                 mask[j, current_dict[k]['position']] = 1
 
@@ -187,7 +190,7 @@ class prepare_data_p():
         mask = np.zeros(((self.batch_size, self.fragment_per_side**2)))
 
         for j in range(self.batch_size):
-            nb_placed_fragment = np.random.randint(self.nb_helpers, self.fragment_per_side**2)
+            nb_placed_fragment = np.random.randint(self.nb_helpers, self.fragment_per_side**2-5)
             # print('nb placed {}'.format(nb_placed_fragment))
             fragments, solution_dict = self.fragments_loader.prepare_problem(i * self.batch_size + j)
             # print('sol dict {}'.format(solution_dict))

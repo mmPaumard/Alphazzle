@@ -24,10 +24,14 @@ def main():
     img_size = x.shape[2]
 
     ### Prepare neural network P ####
-    model_p = LitModelP(img_size, FRAG_SIZE, SPACE_SIZE, CONV_HEAD, NB_FRAG)
+    if LOAD_WEIGHT:
+        model_p = LitModelP.load_from_checkpoint(LOAD_WEIGHT, img_size=img_size, frg_size=FRAG_SIZE, space_size=SPACE_SIZE, CONV_HEAD=CONV_HEAD, NB_FRAG=NB_FRAG)
+        print('v weights loaded from {}'.format(LOAD_WEIGHT))
+    else:
+        model_p = LitModelP(img_size, FRAG_SIZE, SPACE_SIZE, CONV_HEAD, NB_FRAG=NB_FRAG)
 
-    train = torch.utils.data.DataLoader(dataset_train_p, batch_size=64, num_workers=6)
-    val = torch.utils.data.DataLoader(dataset_valid_p, batch_size=64, num_workers=6)
+    train = torch.utils.data.DataLoader(dataset_train_p, batch_size=256, num_workers=6, shuffle=True)
+    val = torch.utils.data.DataLoader(dataset_valid_p, batch_size=32, num_workers=6)
 
     logger = pl.loggers.TensorBoardLogger('tb_logs', name='model_p_'+STRUCT)
     checkpoint_callback = pl.callbacks.ModelCheckpoint(monitor='val_loss', filename='model_p-{epoch:03d}-{val_loss:.3f}', save_top_k=3, mode='min')
@@ -50,6 +54,7 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--central_fragment", nargs=1)
     parser.add_argument("-a", "--augment", action="store_true", default=False)
     parser.add_argument("-o", "--conv_head", action="store_true", default=False)
+    parser.add_argument("-d", "--load", nargs=1)
     args = parser.parse_args()
 
     global VERBOSE, NB_EPOCHS, WRN
@@ -58,12 +63,14 @@ if __name__ == '__main__':
     global DATASET, STRUCT, DATASET_PATH
     global AUGMENT
     global CONV_HEAD
+    global LOAD_WEIGHT
 
     CONV_HEAD = args.conv_head
     AUGMENT = args.augment
 
     VERBOSE = args.verbose[0] if args.verbose else False
     NB_EPOCHS = int(args.nb_epochs[0]) if args.nb_epochs else 50
+    LOAD_WEIGHT = args.load[0] if args.load else False
 
     NB_FRAG = int(args.nb_frag[0]) if args.nb_frag else 3
     NB_HELP = int(args.nb_help[0]) if args.nb_help else 0

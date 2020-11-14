@@ -25,10 +25,10 @@ class LitModelV(pl.LightningModule):
                        patch_size=patch_size,
                        space_size=space_size,
                        num_classes=1,
-                       dim=256,
-                       depth=4,
+                       dim=128,
+                       depth=8,
                        heads=8,
-                       mlp_dim=512,
+                       mlp_dim=256,
                        conv_head=CONV_HEAD,
                        dropout=0.,
                        emb_dropout=0.0)
@@ -64,11 +64,15 @@ class LitModelV(pl.LightningModule):
         x, y, mask = batch
         y_hat = self.forward(x, mask)
         y = y.type_as(y_hat)
-        loss = torch.nn.functional.binary_cross_entropy(y_hat, y)
-        # loss = torch.nn.functional.mse_loss(y_hat, y) + torch.nn.functional.l1_loss(y_hat, y)
+        # loss = torch.nn.functional.binary_cross_entropy(y_hat, y)
+        l2 = torch.nn.functional.mse_loss(y_hat, y)
+        l1 = torch.nn.functional.l1_loss(y_hat, y)
+        loss = l2 + l1
         y_hat = (y_hat > 0.5).float()
         acc = (y_hat == y).sum().item()/x.shape[0]
         # Logging to TensorBoard by default
+        self.log('train_l1', l1, on_epoch=True, on_step=False, logger=True)
+        self.log('train_l2', l2, on_epoch=True, on_step=False, logger=True)
         self.log('train_loss', loss, on_epoch=True, on_step=False, logger=True)
         self.log('train_acc', acc, on_epoch=True, on_step=False, logger=True)
         return loss
@@ -77,11 +81,15 @@ class LitModelV(pl.LightningModule):
         x, y, mask = batch
         y_hat = self.forward(x, mask)
         y = y.type_as(y_hat)
-        loss = torch.nn.functional.binary_cross_entropy(y_hat, y)
-        # loss = torch.nn.functional.mse_loss(y_hat, y) + torch.nn.functional.l1_loss(y_hat, y)
+        # loss = torch.nn.functional.binary_cross_entropy(y_hat, y)
+        l2 = torch.nn.functional.mse_loss(y_hat, y)
+        l1 = torch.nn.functional.l1_loss(y_hat, y)
+        loss = l2 + l1
         y_hat = (y_hat > 0.5).float()
         acc = (y_hat == y).sum().item()/x.shape[0]
         # Logging to TensorBoard by default
+        self.log('val_l1', l1, on_epoch=True, on_step=False, logger=True)
+        self.log('val_l2', l2, on_epoch=True, on_step=False, logger=True)
         self.log('val_loss', loss, on_epoch=True, on_step=False, logger=True)
         self.log('val_acc', acc, on_epoch=True, on_step=False, logger=True)
         return loss
@@ -99,10 +107,10 @@ class LitModelP(pl.LightningModule):
                        patch_size=frg_size,
                        space_size=space_size,
                        num_classes=NB_FRAG**2,
-                       dim=256,
-                       depth=4,
+                       dim=128,
+                       depth=8,
                        heads=8,
-                       mlp_dim=512,
+                       mlp_dim=256,
                        conv_head=CONV_HEAD,
                        dropout=0.,
                        emb_dropout=0.)
@@ -115,32 +123,56 @@ class LitModelP(pl.LightningModule):
         if mask is not None:
             mask = mask.bool()
         out = self.vit(x, mask)
+        if mask is not None:
+            # print('mask1: {}'.format(mask))
+            mask = mask[..., 1:, 1:].flatten(1)
+            # print('mask: {}'.format(mask))
+            out.masked_fill_(mask, float(-100.0))
+            # print('out: {}'.format(out))
         return out
 
     def training_step(self, batch, batch_idx):
         # training_step defined the train loop.
         # It is independent of forward
         x, y, mask = batch
+        bs = x.shape[0]
         y_hat = self.forward(x, mask)
         loss = torch.nn.functional.cross_entropy(y_hat, y)
         _, amax = torch.max(y_hat, 1)
         acc = (amax == y).float().sum().item()/x.shape[0]
+        sor, arg = torch.sort(y_hat, descending=True)
+        rk = torch.zeros(bs)
+        for i in range(bs):
+            rk[i] = arg[i, y[i]]
+        map = (1./(1.+rk)).sum().item()/bs
+        rank = rk.sum().item()/bs
         # Logging to TensorBoard by default
         self.log('train_loss', loss, on_epoch=True, on_step=False, logger=True)
         self.log('train_acc', acc, on_epoch=True, on_step=False, logger=True)
+        self.log('train_map', map, on_epoch=True, on_step=False, logger=True)
+        self.log('train_rank', rank, on_epoch=True, on_step=False, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         # training_step defined the train loop.
         # It is independent of forward
         x, y, mask = batch
+        bs = x.shape[0]
         y_hat = self.forward(x, mask)
         loss = torch.nn.functional.cross_entropy(y_hat, y)
         _, amax = torch.max(y_hat, 1)
         acc = (amax == y).float().sum().item()/x.shape[0]
+        sor, arg = torch.sort(y_hat, descending=True)
+        rk = torch.zeros(bs)
+        for i in range(bs):
+            rk[i] = arg[i, y[i]]
+        map = (1./(1.+rk)).sum().item()/bs
+        rank = rk.sum().item()/bs
         # Logging to TensorBoard by default
         self.log('val_loss', loss, on_epoch=True, on_step=False, logger=True)
         self.log('val_acc', acc, on_epoch=True, on_step=False, logger=True)
+        self.log('val_map', map, on_epoch=True, on_step=False, logger=True)
+        self.log('val_rank', rank, on_epoch=True, on_step=False, logger=True)
         return loss
 
     def configure_optimizers(self):

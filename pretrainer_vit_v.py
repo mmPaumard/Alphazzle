@@ -29,8 +29,8 @@ def main():
     else:
         model_v = LitModelV(img_size, FRAG_SIZE, SPACE_SIZE, CONV_HEAD)
 
-    train = torch.utils.data.DataLoader(dataset_train_p, batch_size=64, num_workers=6)
-    val = torch.utils.data.DataLoader(dataset_valid_p, batch_size=64, num_workers=6)
+    train = torch.utils.data.DataLoader(dataset_train_p, batch_size=256, num_workers=6)
+    val = torch.utils.data.DataLoader(dataset_valid_p, batch_size=32, num_workers=6)
 
     import matplotlib.pyplot as plt
 
